@@ -232,12 +232,18 @@ void Platform_StoreSaveFile(void) { FlushSaveIfChanged(false); }
 
 static PadState sPad;
 static u64 sButtonsHeld, sButtonsDown;
+static bool sHoldStartSelect; /* after the port menu: keep + and - from the game until released */
 
 /* Default: Nintendo Switch Online GBA layout (A is A, B is B). */
 static u16 ReadController(void)
 {
     u64 b = sButtonsHeld;
     u16 keys = 0;
+    if (sHoldStartSelect) {
+        if (!(b & (HidNpadButton_Plus | HidNpadButton_Minus)))
+            sHoldStartSelect = false;
+        b &= ~(u64)(HidNpadButton_Plus | HidNpadButton_Minus);
+    }
     if (b & HidNpadButton_A)
         keys |= A_BUTTON;
     if (b & HidNpadButton_B)
@@ -615,6 +621,109 @@ static void CaptureFrame(u64 frame)
 }
 
 /* ------------------------------------------------------------------------ */
+/* Port menu (Minus + Plus): drawn into the game picture with libnx's font  */
+/* ------------------------------------------------------------------------ */
+
+extern const u8 default_font_bin[]; /* libnx console font: 8x8 glyphs stored at 2x (16x16, 1bpp) */
+
+static bool sMenuOpen;
+static int sMenuCursor;
+static bool sExitRequested;
+static const char *const sMenuItems[] = { "Resume", "Exit game" };
+#define MENU_ITEMS ((int)(sizeof(sMenuItems) / sizeof(sMenuItems[0])))
+
+static void MenuFillRect(int x0, int y0, int w, int h, u16 color, int vw, int vh)
+{
+    for (int y = y0; y < y0 + h; y++) {
+        if (y < 0 || y >= vh)
+            continue;
+        for (int x = x0; x < x0 + w; x++)
+            if (x >= 0 && x < vw)
+                sGameImage[y * DISPLAY_WIDTH + x] = color;
+    }
+}
+
+static void MenuDarken(int vw, int vh)
+{
+    for (int y = 0; y < vh; y++)
+        for (int x = 0; x < vw; x++) {
+            u16 c = sGameImage[y * DISPLAY_WIDTH + x];
+            sGameImage[y * DISPLAY_WIDTH + x] = (u16)((c >> 1) & 0x3DEF);
+        }
+}
+
+static void MenuText(int x, int y, const char *str, u16 color, int vw, int vh)
+{
+    for (; *str; str++, x += 8) {
+        const u8 *g = default_font_bin + (u8)*str * 32;
+        for (int gy = 0; gy < 8; gy++) {
+            u16 row = (u16)(g[gy * 4] | (g[gy * 4 + 1] << 8));
+            for (int gx = 0; gx < 8; gx++) {
+                if (!((row >> (gx * 2)) & 1))
+                    continue;
+                int px = x + gx, py = y + gy;
+                if (px >= 0 && px < vw && py >= 0 && py < vh)
+                    sGameImage[py * DISPLAY_WIDTH + px] = color;
+            }
+        }
+    }
+}
+
+static void MenuDraw(bool classic)
+{
+    const int vw = classic ? 240 : DISPLAY_WIDTH, vh = classic ? 160 : DISPLAY_HEIGHT;
+    const int bw = 160, bh = 40 + MENU_ITEMS * 14;
+    const int bx = (vw - bw) / 2, by = (vh - bh) / 2;
+    MenuDarken(vw, vh);
+    MenuFillRect(bx, by, bw, bh, 0x2884, vw, vh);
+    MenuFillRect(bx, by, bw, 1, 0x7FFF, vw, vh);
+    MenuFillRect(bx, by + bh - 1, bw, 1, 0x7FFF, vw, vh);
+    MenuText(bx + (bw - 17 * 8) / 2, by + 8, "Sonic Advance NX", 0x03FF, vw, vh);
+    for (int i = 0; i < MENU_ITEMS; i++) {
+        u16 color = (i == sMenuCursor) ? 0x7FFF : 0x5294;
+        int ty = by + 28 + i * 14;
+        if (i == sMenuCursor)
+            MenuText(bx + 16, ty, ">", 0x03FF, vw, vh);
+        MenuText(bx + 32, ty, sMenuItems[i], color, vw, vh);
+    }
+}
+
+/* Returns true while the menu holds the game paused. */
+static bool MenuUpdate(void)
+{
+    const u64 combo = HidNpadButton_Minus | HidNpadButton_Plus;
+    if (!sMenuOpen) {
+        if ((sButtonsHeld & combo) == combo && (sButtonsDown & combo)) {
+            sMenuOpen = true;
+            sMenuCursor = 0;
+            sHoldStartSelect = true;
+            if (sAudioDevice != 0)
+                SDL_PauseAudioDevice(sAudioDevice, 1);
+            LogF("menu: open\n");
+        }
+        return sMenuOpen;
+    }
+    if (sButtonsDown & (HidNpadButton_Up | HidNpadButton_StickLUp))
+        sMenuCursor = (sMenuCursor + MENU_ITEMS - 1) % MENU_ITEMS;
+    if (sButtonsDown & (HidNpadButton_Down | HidNpadButton_StickLDown))
+        sMenuCursor = (sMenuCursor + 1) % MENU_ITEMS;
+    bool close = (sButtonsDown & HidNpadButton_B) != 0;
+    if (sButtonsDown & HidNpadButton_A) {
+        if (sMenuCursor == 1)
+            sExitRequested = true;
+        close = true;
+    }
+    if (close) {
+        sMenuOpen = false;
+        if (sAudioDevice != 0)
+            SDL_PauseAudioDevice(sAudioDevice, 0);
+        LogF("menu: %s\n", sExitRequested ? "exit game" : "resume");
+        return !sExitRequested ? false : true;
+    }
+    return true;
+}
+
+/* ------------------------------------------------------------------------ */
 /* Heartbeat                                                                */
 /* ------------------------------------------------------------------------ */
 
@@ -699,6 +808,23 @@ void VBlankIntrWait(void)
     sButtonsHeld = padGetButtons(&sPad);
     sButtonsDown = padGetButtonsDown(&sPad);
 
+    /* Port menu: the game stays paused (this call does not return to it)
+     * until the menu closes. */
+    while (MenuUpdate()) {
+        if (sExitRequested)
+            Shutdown();
+        VDraw();
+        MenuDraw(gGameStageTask == NULL);
+        GfxPresent();
+        if (!appletMainLoop())
+            Shutdown();
+        padUpdate(&sPad);
+        sButtonsHeld = padGetButtons(&sPad);
+        sButtonsDown = padGetButtonsDown(&sPad);
+    }
+    if (sExitRequested)
+        Shutdown();
+
     VDraw();
     if (sButtonsDown & HidNpadButton_StickR)
         CaptureFrame(sFrames);
@@ -717,6 +843,23 @@ void VBlankIntrWait(void)
 /* Entry                                                                    */
 /* ------------------------------------------------------------------------ */
 
+static AppletHookCookie sAppletCookie;
+
+static void AppletHook(AppletHookType hook, void *param)
+{
+    (void)param;
+    switch (hook) {
+        case AppletHookType_OnFocusState:
+            LogF("applet: focus %s\n", appletGetFocusState() == AppletFocusState_InFocus ? "in" : "out");
+            break;
+        case AppletHookType_OnExitRequest:
+            LogF("applet: exit requested\n");
+            break;
+        default:
+            break;
+    }
+}
+
 int main(int argc, char **argv)
 {
     (void)argc;
@@ -728,6 +871,7 @@ int main(int argc, char **argv)
     LogF("applet type %d\n", (int)appletGetAppletType());
     clkrstInitialize();
     LogClocks("start");
+    appletHook(&sAppletCookie, AppletHook, NULL);
 
     padConfigureInput(1, HidNpadStyleSet_NpadStandard);
     padInitializeDefault(&sPad);

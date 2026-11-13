@@ -10,6 +10,7 @@
  *   CAPS=list     comma list of frames to save, or "every:N".
  *   CAPDIR=dir    where frames go (default ./caps).
  *   LAYERS=hex    DISPCNT layer mask to keep while drawing (default 0x1F00).
+ *   SPECIAL_AT=frame  enter the special stage (use with LEVEL).
  *   LEVEL=n LEVEL_AT=frame CHAR=c   jump straight into level n (0..13) at that
  *                 frame as character c (0 Sonic, 1 Tails, 2 Knuckles, 3 Amy).
  * Frame files are named f<frame>s.ppm when a stage is running, else f<frame>m.ppm.
@@ -24,6 +25,7 @@
 #include "task.h"
 #include "game/globals.h"
 #include "game/shared/stage/stage.h"
+#include "game/sa1/special_stage/main.h"
 
 extern void ApplyGameStageSettingsAndStart(void);
 
@@ -42,7 +44,7 @@ static int sNumCaps;
 static const char *sCapDir = "caps";
 static u16 sLayerMask = 0x1F00;
 static int sInit;
-static int sLevel = -1, sLevelAt = -1, sChar;
+static int sLevel = -1, sLevelAt = -1, sChar, sSpecialAt = -1;
 static uint16_t sImage[DISPLAY_WIDTH * DISPLAY_HEIGHT];
 
 static u16 ParseKeys(const char *s)
@@ -103,6 +105,8 @@ static void Init(void)
         sLevelAt = getenv("LEVEL_AT") ? atoi(getenv("LEVEL_AT")) : 400;
         sChar = getenv("CHAR") ? atoi(getenv("CHAR")) : 0;
     }
+    if (getenv("SPECIAL_AT"))
+        sSpecialAt = atoi(getenv("SPECIAL_AT"));
     if (getenv("LAYERS"))
         sLayerMask = (u16)strtoul(getenv("LAYERS"), NULL, 16);
 }
@@ -167,6 +171,15 @@ void Harness_Frame(void)
         gCurrentLevel = sLevel;
         ApplyGameStageSettingsAndStart();
         fprintf(stderr, "harness: started level %d at frame %u\n", sLevel, sFrame);
+    }
+    if ((int)sFrame == sSpecialAt) {
+        // Same steps the special spring takes (special_spring.c).
+        TasksDestroyAll();
+        PAUSE_BACKGROUNDS_QUEUE();
+        gBgSpritesCount = 0;
+        PAUSE_GRAPHICS_QUEUE();
+        CreateSpecialStageIntro();
+        fprintf(stderr, "harness: special stage at frame %u\n", sFrame);
     }
     if (WantCap(sFrame))
         SaveFrame(sFrame);

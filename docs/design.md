@@ -36,7 +36,7 @@ Plan: the game code is always the European build (it is the one the decomp verif
 | Threads | One game thread (core 1), audio (core 0), presentation (core 2) | our usual layout |
 | Frame pacing | Wait on the real vsync event (no spin loop), one game frame per refresh, frames drawn vs presented in the log | our ports (cv64-nx window code) |
 | Graphics compositor | upstream gpsp software renderer, 426x240 | SAT-R/sa2 |
-| Presentation | deko3d: the frame uploaded as a texture and drawn as one quad; pixel-perfect or fill scaling; optional LCD filter. Shaders compiled offline into the NRO | our ports, TriAevum-Switch notes |
+| Presentation | deko3d: the frame uploaded as a texture and drawn as one quad filling the screen at the correct aspect. Shaders compiled offline into the NRO | our ports, TriAevum-Switch notes |
 | Audio | upstream m4a mixer, 48 kHz out through audout or SDL audio, with a steady buffer (no clearing the queue on backlog) | SAT-R/sa2 mixer |
 | Input | libnx pad, per-button remap, Switch Online GBA layout as default | ours |
 | Saves | 64 KiB flash image in RAM, written to the SD card whenever the game saves (not only on exit), delete then rename for FAT | sonic_advance2_nx flash layer, plus fixes below |
@@ -68,8 +68,6 @@ Direct writes to game state, no codes needed: infinite lives, keep rings (no rin
 - Per-button remapping.
 - Restart act from the pause menu.
 - Saves written immediately.
-- Pixel-perfect integer scaling or fill, and an optional LCD filter.
-- Skip the boot logos.
 - Language choice (all five with the Europe dump, two with the USA dump).
 
 Not planned: multiplayer (link cable) and Tiny Chao Garden.
@@ -87,9 +85,10 @@ Not planned: multiplayer (link cable) and Tiny Chao Garden.
 
 A plain build links Sega's game data into the NRO: the extracted graphics and songs, and the 0.67 MB of ROM blobs. For a public release, the port would instead read data from the player's own dump at first start. Because the decomp rebuilds the European ROM exactly, every data symbol's position in that ROM is known from the GBA build's map file; the build records offset and size for each one, and the port fills them in from the dump (through the USA mapping table when needed). Tables made of pointers stay in the binary, since they are rebuilt as native 64-bit pointers on the Switch. This is phase 5 work, only needed for a public release.
 
-## Open decisions for Mark
+## Decisions (Mark, Nov 13 2026)
 
-1. Public release planned? If yes, phase 5 above is in scope.
-2. Which quality-of-life items and cheats he wants first.
-3. GPU compositor later (deko3d drawing tiles and sprites itself): only worth it for extras such as smooth high-resolution rotation in the special stages. Not planned unless he wants it.
-4. Version number and app title for the homebrew menu.
+1. Public release: yes. Phase 5 (game data read from the player's own dump) is in scope.
+2. Quality of life: button remapping and restart act from pause, yes. Language choice: nice to have, low priority. Scaling options, LCD filter and skipping boot logos: no. Presentation is one fixed mode (fill the screen at the correct aspect).
+3. GPU compositor: open to it later, after the core port works.
+4. Version 0.1.0 to start; homebrew menu title "Sonic Advance NX".
+5. Frame rate: 60 fps. The original already runs one full game update per refresh (one `VBlankIntrWait` per pass of `EngineMainLoop`), so the port matches it.

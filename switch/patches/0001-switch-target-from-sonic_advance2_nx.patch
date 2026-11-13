@@ -1,0 +1,492 @@
+--- a/Makefile
++++ b/Makefile
+@@ -60,6 +60,15 @@
+   PREFIX    := psp-
+ else ifeq ($(PLATFORM),ps2)
+   PREFIX := mips64r5900el-ps2-elf-
++else ifeq ($(PLATFORM),switch)
++  ifeq ($(strip $(DEVKITPRO)),)
++    $(error DEVKITPRO must point to a devkitPro installation when PLATFORM=switch)
++  endif
++  DEVKITA64 ?= $(DEVKITPRO)/devkitA64
++  LIBNX ?= $(DEVKITPRO)/libnx
++  PORTLIBS ?= $(DEVKITPRO)/portlibs/switch
++  export PATH := $(DEVKITA64)/bin:$(DEVKITPRO)/tools/bin:$(PATH)
++  PREFIX := aarch64-none-elf-
+ else
+ # Native
+   ifneq ($(PLATFORM),sdl)
+@@ -84,6 +93,7 @@
+ CC1       := $(PREFIX)gcc$(EXE)
+ CXX       := $(PREFIX)g++$(EXE)
+ CC1_OLD   := $(CC1)
++LINKER    := $(CC1)
+ endif
+ 
+ CPP       := $(PREFIX)cpp
+@@ -134,9 +144,15 @@
+ ELF      := $(BUILD_NAME).sdl_psp.elf
+ MAP      := $(BUILD_NAME).sdl_psp.map
+ else ifeq ($(PLATFORM),ps2)
+-ROM      := $(BUILD_NAME).$(PLATFORM).iso
+-ELF      := $(ROM:.iso=.elf)
+-MAP      := $(ROM:.iso=.map)
++  ROM      := $(BUILD_NAME).$(PLATFORM).iso
++  ELF      := $(ROM:.iso=.elf)
++  MAP      := $(ROM:.iso=.map)
++else ifeq ($(PLATFORM),switch)
++  ROM      := $(BUILD_NAME)_nx.nro
++  ELF      := $(BUILD_NAME)_nx.elf
++  MAP      := $(BUILD_NAME)_nx.map
++  NACP     := $(BUILD_NAME)_nx.nacp
++  SWITCH_ICON_ARG := $(if $(strip $(SWITCH_ICON)),--icon=$(SWITCH_ICON),)
+ else
+ ROM      := $(BUILD_NAME).$(PLATFORM).exe
+ ELF      := $(ROM:.exe=.elf)
+@@ -188,7 +204,9 @@
+ else ifeq ($(PLATFORM),sdl_win32)
+ C_SRCS_IN := $(shell find $(C_SUBDIR) -name "*.c" $(C_SRC_IGNORE_PATHS) -not -path "*/platform/win32/*" -not -path "*/platform/ps2/*")
+ else ifeq ($(PLATFORM),win32)
+-C_SRCS_IN := $(shell find $(C_SUBDIR) -name "*.c" $(C_SRC_IGNORE_PATHS) -not -path "*/platform/pret_sdl/*" -not -path "*/platform/ps2/*")
++  C_SRCS_IN := $(shell find $(C_SUBDIR) -name "*.c" $(C_SRC_IGNORE_PATHS) -not -path "*/platform/pret_sdl/*" -not -path "*/platform/ps2/*")
++else ifeq ($(PLATFORM),switch)
++  C_SRCS_IN := $(shell find $(C_SUBDIR) -name "*.c" $(C_SRC_IGNORE_PATHS) -not -path "*/platform/pret_sdl/*" -not -path "*/platform/win32/*" -not -path "*/platform/ps2/*")
+ else
+ C_SRCS_IN := $(shell find $(C_SUBDIR) -name "*.c" $(C_SRC_IGNORE_PATHS))
+ endif
+@@ -273,6 +291,14 @@
+ 		CPPFLAGS += -D TITLE_BAR=$(BUILD_NAME).$(PLATFORM) -D PLATFORM_GBA=0 -D PLATFORM_SDL=1 -D PLATFORM_WIN32=0 $(SDL_MINGW_FLAGS)
+ 	else ifeq ($(PLATFORM),win32)
+ 		CPPFLAGS += -D TITLE_BAR=$(BUILD_NAME).$(PLATFORM) -D PLATFORM_GBA=0 -D PLATFORM_SDL=0 -D PLATFORM_WIN32=1
++	else ifeq ($(PLATFORM),switch)
++		CPPFLAGS += -D TITLE_BAR=$(BUILD_NAME)_nx -D PLATFORM_GBA=0 -D PLATFORM_SDL=1 -D PLATFORM_WIN32=0 -D PLATFORM_SWITCH=1 -D__SWITCH__ -I$(LIBNX)/include -I$(PORTLIBS)/include/SDL2
++		ifeq ($(GAME_NAME),sa1)
++			CPPFLAGS += -D SWITCH_LEGACY_OAM=1
++		endif
++		CC1FLAGS += -march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE -ffunction-sections
++		LDFLAGS += -specs=$(DEVKITPRO)/libnx/switch.specs -fPIE
++		LINKER := $(CXX)
+ 	endif
+ 
+ 	ifeq ($(CPU_ARCH),i386)
+@@ -369,6 +395,8 @@
+     LIBS := -L$(PSPDEV)/psp/lib $(LIBABGSYSCALL_LIBS) -L$(PSPSDK)/lib -lSDL2 -lm -lGL -lpspvram -lpspaudio -lpspvfpu -lpspdisplay -lpspgu -lpspge -lpsphprm -lpspctrl -lpsppower -lpspdebug -lpspnet -lpspnet_apctl -Wl,-zmax-page-size=128
+ else ifeq ($(PLATFORM),ps2)
+     LIBS := -T$(PS2SDK)/ee/startup/linkfile $(LIBABGSYSCALL_LIBS) -L$(PS2SDK)/common/lib -L$(PS2SDK)/ee/lib -L$(PS2DEV)/gsKit/lib -L$(PS2SDK)/ports/lib -lgskit -ldmakit -lps2_drivers -lmc -lpatches -Wl,-zmax-page-size=128
++else ifeq ($(PLATFORM),switch)
++    LIBS := $(LIBABGSYSCALL_LIBS) -L$(PORTLIBS)/lib -L$(LIBNX)/lib -lSDL2 -lGLESv2 -lEGL -lglapi -ldrm_nouveau -lnx -lm
+ else ifeq ($(PLATFORM),sdl_win32)
+     LIBS := -mwin32 -lkernel32 -lwinmm -lmingw32 -lxinput $(LIBABGSYSCALL_LIBS) $(SDL_MINGW_LIBS)
+ else ifeq ($(PLATFORM), win32)
+@@ -378,7 +406,7 @@
+ #### MAIN TARGETS ####
+ 
+ # these commands will run regardless of deps being completed
+-.PHONY: clean tools tidy clean-tools $(TOOLDIRS) libagbsyscall ps2 sa1
++.PHONY: clean tools tidy clean-tools $(TOOLDIRS) libagbsyscall ps2 sa1 switch
+ 
+ # Ensure required directories exist
+ $(shell mkdir -p $(C_BUILDDIR) $(ASM_BUILDDIR) $(DATA_ASM_BUILDDIR) $(SOUND_ASM_BUILDDIR) $(SONG_BUILDDIR) $(MID_BUILDDIR))
+@@ -463,7 +491,7 @@
+ tidy:
+ 	$(RM) -r build/*
+ 	$(RM) SDL2.dll
+-	$(RM) $(BUILD_NAME)*.exe $(BUILD_NAME)*.elf $(BUILD_NAME)*.map $(BUILD_NAME)*.sdl $(BUILD_NAME)*.gba $(BUILD_NAME)*.iso
++	$(RM) $(BUILD_NAME)*.exe $(BUILD_NAME)*.elf $(BUILD_NAME)*.map $(BUILD_NAME)*.sdl $(BUILD_NAME)*.gba $(BUILD_NAME)*.iso $(BUILD_NAME)*.nro $(BUILD_NAME)*.nacp
+ 	$(RM) EBOOT.PBP PARAM.SFO
+ 
+ usa_beta: ; @$(MAKE) GAME_REGION=USA GAME_VARIANT=BETA
+@@ -480,6 +508,8 @@
+ 
+ ps2: ; @$(MAKE) PLATFORM=ps2
+ 
++switch: ; @$(MAKE) PLATFORM=switch CPU_ARCH=arm64
++
+ tas_sdl: ; @$(MAKE) sdl TAS_TESTING=1
+ 
+ sdl_win32:
+@@ -530,7 +560,7 @@
+ 
+ %.bin: %.aif ; $(AIF) $< $@
+ 
+-$(ELF): $(OBJS)
++$(ELF): $(OBJS) libagbsyscall
+ ifeq ($(PLATFORM),gba)
+ 	@echo "$(LD) -T $(LDSCRIPT) $(MAP_FLAG) $(MAP) <objects> <lib> -o $@"
+ 	@$(CPP) -P $(CPPFLAGS) $(LDSCRIPT) > $(OBJ_DIR)/$(LDSCRIPT)
+@@ -538,11 +568,11 @@
+ else
+ 	@echo "$(CC1) $(MAP_FLAG)$(MAP) <objects> <lib> -o $@"
+ 	@touch $(ROOT_DIR)/$(MAP)
+-	@cd $(OBJ_DIR) && $(CC1) $(MAP_FLAG)$(ROOT_DIR)/$(MAP) $(OBJS_REL) $(LIBS) -o $(ROOT_DIR)/$@
++	@cd $(OBJ_DIR) && $(LINKER) $(LDFLAGS) $(MAP_FLAG)$(ROOT_DIR)/$(MAP) $(OBJS_REL) $(LIBS) -o $(ROOT_DIR)/$@
+ endif
+ 
+ 
+-$(ROM): $(ELF) libagbsyscall
++$(ROM): $(ELF) $(NACP)
+ ifeq ($(PLATFORM),gba)
+ 	$(OBJCOPY) -O binary --pad-to 0x8400000 $< $@
+ 	$(FIX) $@ -p -t"$(TITLE)" -c$(GAME_CODE) -m$(MAKER_CODE) -r$(GAME_REVISION) --silent
+@@ -563,10 +593,22 @@
+ 	@printf "BOOT2 = cdrom0:\\$(PS2_GAME_CODE);1\nVER = 1.00\nVMODE = NTSC" > $(OBJ_DIR)/iso/SYSTEM.CNF
+ 	@cp $< $(OBJ_DIR)/iso/$(PS2_GAME_CODE)
+ 	@mkisofs -o $(ROM) $(OBJ_DIR)/iso/
++else ifeq ($(PLATFORM),switch)
++	@$(DEVKITPRO)/tools/bin/elf2nro $< $@ $(SWITCH_ICON_ARG) --nacp=$(NACP)
+ else
+ 	$(OBJCOPY) -O pei-x86-64 $< $@
+ endif
+ 
++ifeq ($(PLATFORM),switch)
++ifeq ($(GAME_NAME),sa1)
++$(NACP):
++	@$(DEVKITPRO)/tools/bin/nacptool --create "Sonic Advance" "SAT-R / Switch port" "0.1.0" $@
++else
++$(NACP):
++	@$(DEVKITPRO)/tools/bin/nacptool --create "Sonic Advance 2" "boraeskicioglu / SAT-R" "0.1.0" $@
++endif
++endif
++
+ # Build c sources, and ensure alignment
+ $(C_BUILDDIR)/%.o: $(C_SUBDIR)/%.c
+ 	@echo "$(CC1) <flags> -o $@ $<"
+--- a/config.mk
++++ b/config.mk
+@@ -18,6 +18,9 @@
+ else ifeq ($(CPU_ARCH),i386)
+     THUMB_SUPPORT ?= 0
+     MIDI_COMMENTS := "x86"
++else ifeq ($(CPU_ARCH),arm64)
++    THUMB_SUPPORT ?= 0
++    MIDI_COMMENTS := "arm"
+ else
+     $(error unknown arch: $(CPU_ARCH))
+ endif
+--- a/asm/macros/portable.inc
++++ b/asm/macros/portable.inc
+@@ -1,5 +1,10 @@
+ .macro mSectionRodata
+-#if (!CPU_ARCH_X86 && defined(__APPLE__)) // On macos, native compilation uses this name for the rodata section
++#if defined(PLATFORM_SWITCH)
++  // Generated music tables contain native-width pointers.  Switch's loader
++  // must relocate them before execution, so they cannot live in read-only
++  // memory like ordinary asset bytes.
++  .section .data.rel.ro
++#elif (!CPU_ARCH_X86 && defined(__APPLE__)) // On macos, native compilation uses this name for the rodata section
+   .section __DATA,__data
+ #else
+   .section .rodata
+@@ -21,8 +26,12 @@
+ .macro mAlignWord
+ #if defined(__APPLE__) && (defined(__aarch64__) || defined(__x86_64__))
+     .align 3       // Align to 8 bytes on macOS (2^3 = 8)
+-#elif defined(__aarch64__) || defined(__x86_64__)
+-    .align 8       // Align to 8 bytes on other platforms
++#elif defined(__aarch64__)
++    // AArch64 GNU as interprets `.align 8` as 2^8 bytes.  The portable
++    // structs use native pointers but require only 8-byte alignment.
++    .balign 8
++#elif defined(__x86_64__)
++    .align 8       // Align to 8 bytes on x86_64
+ #elif defined(PLATFORM_GBA)
+     .align 2       // Align to 4 bytes on GBA
+ #else
+--- a/include/gba/defines.h
++++ b/include/gba/defines.h
+@@ -59,7 +59,17 @@
+ #undef VRAM_SIZE
+ #define VRAM_SIZE (0x18000 + (0x800 * (12)))
+ #define WIDESCREEN_HACK TRUE
++#if defined(__SWITCH__) && defined(SWITCH_LEGACY_OAM)
++// SA1's menus and HUD rely on the original packed GBA OAM layout.
++// The portable EXTENDED_OAM path is explicitly marked unfinished and
++// drops/misplaces SA1 overlay sprites on Switch. Keep the widescreen
++// framebuffer, but use normal 8-byte OAM entries for SA1. This must be
++// selected by the build system: some generated data includes this header
++// before the GAME_SA1/GAME_SA2 constants are defined.
++#define EXTENDED_OAM FALSE
++#else
+ #define EXTENDED_OAM TRUE
++#endif
+ #else
+ #define WIDESCREEN_HACK FALSE
+ #define EXTENDED_OAM !TRUE
+--- a/src/core.c
++++ b/src/core.c
+@@ -492,7 +492,9 @@
+     if (errorIdentifying) {
+         gFlags |= FLAGS_NO_FLASH_MEMORY;
+     } else {
++#if !PORTABLE
+         SetFlashTimerIntr(1, &gIntrTable[5]);
++#endif
+     }
+ #endif
+ 
+--- a/src/game/sa2/save.c
++++ b/src/game/sa2/save.c
+@@ -8,6 +8,10 @@
+ #include "constants/sa2/text.h"
+ #include "constants/zones.h"
+ 
++#if PORTABLE
++extern void Platform_StoreSaveFile(void);
++#endif
++
+ struct SaveSectorHeader {
+     u32 security, version;
+ };
+@@ -66,8 +70,8 @@
+ #define CalcChecksum(save)                                                                                                                 \
+     ({                                                                                                                                     \
+         u32 j, checksum = 0;                                                                                                               \
+-        for (j = 0; j < SECTOR_CHECKSUM_OFFSET; j += sizeof(uintptr_t)) {                                                                  \
+-            checksum += *(uintptr_t *)((void *)(save) + j);                                                                                \
++        for (j = 0; j < SECTOR_CHECKSUM_OFFSET; j += sizeof(u32)) {                                                                        \
++            checksum += *(u32 *)((void *)(save) + j);                                                                                      \
+         }                                                                                                                                  \
+         checksum;                                                                                                                          \
+     })
+@@ -524,6 +528,12 @@
+ 
+     result = ProgramFlashSectorAndVerifyNBytes(sectorNum, data, sizeof(struct SaveSectorData));
+ 
++#if PORTABLE
++    if (result == 0) {
++        Platform_StoreSaveFile();
++    }
++#endif
++
+     REG_IE = preIE;
+     REG_IME = preIME;
+     REG_DISPSTAT = preDISPSTAT;
+@@ -826,6 +836,12 @@
+ 
+     result = EraseFlashSector(sectorNum);
+ 
++#if PORTABLE
++    if (result == 0) {
++        Platform_StoreSaveFile();
++    }
++#endif
++
+     REG_IE = preIE;
+     REG_IME = preIME;
+     REG_DISPSTAT = preDISPSTAT;
+--- a/src/lib/agb_flash/agb_flash.c
++++ b/src/lib/agb_flash/agb_flash.c
+@@ -2,6 +2,8 @@
+ #include "lib/agb_flash/flash_internal.h"
+ #include "lib/agb_flash/agb_flash.h"
+ 
++#include <string.h>
++
+ #if AGBFLASH_USE_V126
+ static const u16 *gFlashMaxTime;
+ static u8 (*PollFlashStatus)(u8 *);
+@@ -227,6 +229,16 @@
+ 
+ void ReadFlash(u16 sectorNum, u32 offset, void *dest, u32 size)
+ {
++#if PORTABLE
++    const struct FlashType *flash = gFlash != NULL ? gFlash : &DefaultFlash512K.type;
++
++    if (sectorNum >= flash->sector.count || offset > flash->sector.size || size > flash->sector.size - offset) {
++        memset(dest, 0xFF, size);
++        return;
++    }
++
++    memcpy(dest, FLASH_BASE + (sectorNum << flash->sector.shift) + offset, size);
++#else
+     u8 *src;
+     u16 i;
+     u16 readFlash_Core_Buffer[0x40];
+@@ -263,6 +275,7 @@
+ #endif
+ 
+     readFlash_Core(src, dest, size);
++#endif
+ }
+ 
+ u32 VerifyFlashSector_Core(u8 *src, u8 *tgt, u32 size)
+@@ -277,6 +290,17 @@
+ 
+ u32 VerifyFlashSector(u16 sectorNum, u8 *src)
+ {
++#if PORTABLE
++    const struct FlashType *flash = gFlash != NULL ? gFlash : &DefaultFlash512K.type;
++    u8 *target;
++
++    if (sectorNum >= flash->sector.count) {
++        return 1;
++    }
++
++    target = FLASH_BASE + (sectorNum << flash->sector.shift);
++    return memcmp(src, target, flash->sector.size) == 0 ? 0 : 1;
++#else
+     u16 i;
+     u16 verifyFlashSector_Core_Buffer[0x80];
+     u16 *funcSrc;
+@@ -316,10 +340,22 @@
+ #endif
+ 
+     return verifyFlashSector_Core(src, tgt, size); // return 0 if verified.
++#endif
+ }
+ 
+ u32 VerifyFlashSectorNBytes(u16 sectorNum, u8 *src, u32 n)
+ {
++#if PORTABLE
++    const struct FlashType *flash = gFlash != NULL ? gFlash : &DefaultFlash512K.type;
++    u8 *target;
++
++    if (sectorNum >= flash->sector.count || n > flash->sector.size) {
++        return 1;
++    }
++
++    target = FLASH_BASE + (sectorNum << flash->sector.shift);
++    return memcmp(src, target, n) == 0 ? 0 : 1;
++#else
+     u16 i;
+     u16 verifyFlashSector_Core_Buffer[0x80];
+     u16 *funcSrc;
+@@ -356,6 +392,7 @@
+ #endif
+ 
+     return verifyFlashSector_Core(src, tgt, n);
++#endif
+ }
+ 
+ u32 ProgramFlashSectorAndVerify(u16 sectorNum, u8 *src)
+@@ -379,6 +416,19 @@
+ 
+ u32 ProgramFlashSectorAndVerifyNBytes(u16 sectorNum, void *dataSrc, u32 n)
+ {
++#if PORTABLE
++    const struct FlashType *flash = gFlash != NULL ? gFlash : &DefaultFlash512K.type;
++    u8 *target;
++
++    if (sectorNum >= flash->sector.count || n > flash->sector.size) {
++        return 1;
++    }
++
++    target = FLASH_BASE + (sectorNum << flash->sector.shift);
++    memset(target, 0xFF, flash->sector.size);
++    memcpy(target, dataSrc, n);
++    return memcmp(target, dataSrc, n) == 0 ? 0 : 1;
++#else
+     u8 i;
+     u32 result;
+ 
+@@ -393,4 +443,5 @@
+     }
+ 
+     return result;
++#endif
+ }
+--- a/src/lib/agb_flash/agb_flash_512k.c
++++ b/src/lib/agb_flash/agb_flash_512k.c
+@@ -1,6 +1,8 @@
+ #include "global.h"
+ #include "lib/agb_flash/flash_internal.h"
+ 
++#include <string.h>
++
+ #ifndef AGBFLASH_USE_V126
+ static const char AgbLibFlash512KVersion[] = "FLASH512_V130";
+ const struct FlashSetupInfo *const gSetup512KInfos[] = {
+@@ -10,6 +12,38 @@
+     &DefaultFlash512K,
+ };
+ 
++#if PORTABLE
++static u16 PortableEraseFlashChip(void)
++{
++    memset(FLASH_BASE, 0xFF, DefaultFlash512K.type.romSize);
++    return 0;
++}
++
++static u16 PortableEraseFlashSector(u16 sectorNum)
++{
++    if (sectorNum >= DefaultFlash512K.type.sector.count) {
++        return 0x80FF;
++    }
++
++    memset(FLASH_BASE + (sectorNum << DefaultFlash512K.type.sector.shift), 0xFF, DefaultFlash512K.type.sector.size);
++    return 0;
++}
++
++static u16 PortableProgramFlashSector(u16 sectorNum, void *src)
++{
++    u8 *dest;
++
++    if (sectorNum >= DefaultFlash512K.type.sector.count) {
++        return 0x80FF;
++    }
++
++    dest = FLASH_BASE + (sectorNum << DefaultFlash512K.type.sector.shift);
++    memset(dest, 0xFF, DefaultFlash512K.type.sector.size);
++    memcpy(dest, src, DefaultFlash512K.type.sector.size);
++    return 0;
++}
++#endif
++
+ u16 IdentifyFlash(void)
+ {
+ 
+@@ -18,7 +52,14 @@
+     const struct FlashSetupInfo *const *setupInfo;
+ 
+ #if PORTABLE
+-    result = 1;
++    /* Use the original save system on top of the portable memory buffer. */
++    ProgramFlashSector = PortableProgramFlashSector;
++    EraseFlashChip = PortableEraseFlashChip;
++    EraseFlashSector = PortableEraseFlashSector;
++    WaitForFlashWrite = DefaultFlash512K.WaitForFlashWrite;
++    gFlashMaxTime = DefaultFlash512K.maxTime;
++    gFlash = &DefaultFlash512K.type;
++    result = 0;
+ #else
+     REG_WAITCNT = (REG_WAITCNT & ~WAITCNT_SRAM_MASK) | WAITCNT_SRAM_8;
+ 
+--- a/tools/preproc/preproc.cpp
++++ b/tools/preproc/preproc.cpp
+@@ -147,7 +147,8 @@
+     || (!platform.compare("sdl"))
+     || (!platform.compare("sdl_win32"))
+     || (!platform.compare("sdl_psp"))
+-    || (!platform.compare("ps2")))
++    || (!platform.compare("ps2"))
++    || (!platform.compare("switch")))
+     {
+         fullRGBA = false;
+     } else if(!platform.compare("win32")) {
+--- a/libagbsyscall/Makefile
++++ b/libagbsyscall/Makefile
+@@ -47,6 +47,13 @@
+   PREFIX    := psp-
+ else ifeq ($(PLATFORM),ps2)
+   PREFIX := mips64r5900el-ps2-elf-
++else ifeq ($(PLATFORM),switch)
++  ifeq ($(strip $(DEVKITPRO)),)
++    $(error DEVKITPRO must point to a devkitPro installation when PLATFORM=switch)
++  endif
++  DEVKITA64 ?= $(DEVKITPRO)/devkitA64
++  export PATH := $(DEVKITA64)/bin:$(DEVKITPRO)/tools/bin:$(PATH)
++  PREFIX := aarch64-none-elf-
+ else ifneq ($(PLATFORM),sdl)
+    $(error Unknown CPU architecture $(CPU_ARCH))
+ endif # (PLATFORM == gba)
+@@ -96,6 +103,10 @@
+         CPPFLAGS += -D CPU_ARCH_X86=0
+     endif
+ 
++    ifeq ($(PLATFORM),switch)
++        CC1FLAGS += -march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
++    endif
++
+     ifeq ($(PLATFORM), sdl)
+     ifeq ($(shell uname -s),Darwin)
+         # -E: Pre-process only (needed for MacOS?)

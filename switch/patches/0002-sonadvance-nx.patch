@@ -1,0 +1,46 @@
+diff --git a/Makefile b/Makefile
+index 13750c6f0..6e2a64c11 100644
+--- a/Makefile
++++ b/Makefile
+@@ -292,7 +292,7 @@ else
+ 	else ifeq ($(PLATFORM),win32)
+ 		CPPFLAGS += -D TITLE_BAR=$(BUILD_NAME).$(PLATFORM) -D PLATFORM_GBA=0 -D PLATFORM_SDL=0 -D PLATFORM_WIN32=1
+ 	else ifeq ($(PLATFORM),switch)
+-		CPPFLAGS += -D TITLE_BAR=$(BUILD_NAME)_nx -D PLATFORM_GBA=0 -D PLATFORM_SDL=1 -D PLATFORM_WIN32=0 -D PLATFORM_SWITCH=1 -D__SWITCH__ -I$(LIBNX)/include -I$(PORTLIBS)/include/SDL2
++		CPPFLAGS += -D TITLE_BAR=$(BUILD_NAME)_nx -D PLATFORM_GBA=0 -D PLATFORM_SDL=1 -D PLATFORM_WIN32=0 -D PLATFORM_SWITCH=1 -D__SWITCH__ -I$(LIBNX)/include -I$(PORTLIBS)/include/SDL2 -I$(SONADV_GEN_DIR) -D 'SONADV_BUILD_ID="$(SONADV_BUILD_ID)"' -D 'SONADV_VERSION="$(SONADV_VERSION)"'
+ 		ifeq ($(GAME_NAME),sa1)
+ 			CPPFLAGS += -D SWITCH_LEGACY_OAM=1
+ 		endif
+@@ -396,7 +396,7 @@ else ifeq ($(PLATFORM),sdl_psp)
+ else ifeq ($(PLATFORM),ps2)
+     LIBS := -T$(PS2SDK)/ee/startup/linkfile $(LIBABGSYSCALL_LIBS) -L$(PS2SDK)/common/lib -L$(PS2SDK)/ee/lib -L$(PS2DEV)/gsKit/lib -L$(PS2SDK)/ports/lib -lgskit -ldmakit -lps2_drivers -lmc -lpatches -Wl,-zmax-page-size=128
+ else ifeq ($(PLATFORM),switch)
+-    LIBS := $(LIBABGSYSCALL_LIBS) -L$(PORTLIBS)/lib -L$(LIBNX)/lib -lSDL2 -lGLESv2 -lEGL -lglapi -ldrm_nouveau -lnx -lm
++    LIBS := $(LIBABGSYSCALL_LIBS) -L$(PORTLIBS)/lib -L$(LIBNX)/lib -ldeko3d -lSDL2 -lGLESv2 -lEGL -lglapi -ldrm_nouveau -lnx -lm
+ else ifeq ($(PLATFORM),sdl_win32)
+     LIBS := -mwin32 -lkernel32 -lwinmm -lmingw32 -lxinput $(LIBABGSYSCALL_LIBS) $(SDL_MINGW_LIBS)
+ else ifeq ($(PLATFORM), win32)
+@@ -602,7 +602,7 @@ endif
+ ifeq ($(PLATFORM),switch)
+ ifeq ($(GAME_NAME),sa1)
+ $(NACP):
+-	@$(DEVKITPRO)/tools/bin/nacptool --create "Sonic Advance" "SAT-R / Switch port" "0.1.0" $@
++	@$(DEVKITPRO)/tools/bin/nacptool --create "Sonic Advance NX" "SonAdvance-nx (SAT-R decomp)" "$(SONADV_VERSION)" $@
+ else
+ $(NACP):
+ 	@$(DEVKITPRO)/tools/bin/nacptool --create "Sonic Advance 2" "boraeskicioglu / SAT-R" "0.1.0" $@
+diff --git a/src/game/sa1/save.c b/src/game/sa1/save.c
+index 0cff1b6bc..dd59990fb 100644
+--- a/src/game/sa1/save.c
++++ b/src/game/sa1/save.c
+@@ -21,8 +21,8 @@ struct SaveGame gLoadedSaveGame = {};
+ #define CalcChecksum(save)                                                                                                                 \
+     ({                                                                                                                                     \
+         u32 j, checksum = 0;                                                                                                               \
+-        for (j = 0; j < SECTOR_CHECKSUM_OFFSET; j += sizeof(uintptr_t)) {                                                                  \
+-            checksum += *(uintptr_t *)((void *)(save) + j);                                                                                \
++        for (j = 0; j < SECTOR_CHECKSUM_OFFSET; j += sizeof(u32)) {                                                                        \
++            checksum += *(u32 *)((void *)(save) + j);                                                                                      \
+         }                                                                                                                                  \
+         checksum;                                                                                                                          \
+     })

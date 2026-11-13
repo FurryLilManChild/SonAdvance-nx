@@ -1,0 +1,48 @@
+--- a/src/lib/agb_flash/agb_flash.c
++++ b/src/lib/agb_flash/agb_flash.c
+@@ -88,10 +88,44 @@
+ }
+ 
+ #if AGBFLASH_USE_V126
++#if PORTABLE
++// SonAdvance-nx: SA1 uses this older flash library. On PC it reported "no
++// flash chip", so the game switched saving off entirely (FLAGS_NO_FLASH_MEMORY).
++// The flash is a 64 KiB buffer (FLASH_BASE) that the Switch layer writes to
++// the SD card whenever it changes.
++static u16 PortableV126EraseFlashChip(void)
++{
++    memset(FLASH_BASE, 0xFF, DefaultFlash512K.type.romSize);
++    return 0;
++}
++
++static u16 PortableV126EraseFlashSector(u16 sectorNum)
++{
++    if (sectorNum >= DefaultFlash512K.type.sector.count)
++        return 0x80FF;
++    memset(FLASH_BASE + (sectorNum << DefaultFlash512K.type.sector.shift), 0xFF, DefaultFlash512K.type.sector.size);
++    return 0;
++}
++
++static u16 PortableV126ProgramFlashSector(u16 sectorNum, void *src)
++{
++    if (sectorNum >= DefaultFlash512K.type.sector.count)
++        return 0x80FF;
++    memcpy(FLASH_BASE + (sectorNum << DefaultFlash512K.type.sector.shift), src, DefaultFlash512K.type.sector.size);
++    return 0;
++}
++#endif
++
+ u16 IdentifyFlash(void)
+ {
+ #if PORTABLE
+-    return TRUE;
++    ProgramFlashSector = PortableV126ProgramFlashSector;
++    EraseFlashChip = PortableV126EraseFlashChip;
++    EraseFlashSector = PortableV126EraseFlashSector;
++    WaitForFlashWrite = DefaultFlash512K.WaitForFlashWrite;
++    gFlashMaxTime = DefaultFlash512K.maxTime;
++    gFlash = &DefaultFlash512K.type;
++    return 0;
+ #endif
+     u16 result;
+     u16 flashId;

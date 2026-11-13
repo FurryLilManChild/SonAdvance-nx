@@ -1,0 +1,78 @@
+--- a/src/background.c
++++ b/src/background.c
+@@ -1161,6 +1161,67 @@
+ // (58.36%) https://decomp.me/scratch/ClyxP
+ // (48.23%) https://decomp.me/scratch/bDTEe
+ #if 01
++#if PORTABLE
++// SonAdvance-nx: native version of sub_8004010, written from the original
++// routine (asm/non_matching/engine/sa2__sub_8004010.inc). It fills a
++// rectangle of a background's map with a value (rows y0..y1, columns x0..x1,
++// or from row y0 to y1 when x1 is 0xFF), then clears the request. The C below
++// it never wrote the map on PC (its text-mode fill was disabled), so screens
++// that rely on it kept the previous screen's map, e.g. garbage around the
++// SEGA logo after the language screen.
++u32 SA2_LABEL(sub_8004010)(void)
++{
++    for (u32 bg = 0; bg < 4; bg++) {
++        u8 *req = gBgSprites_Unknown2[bg];
++        u32 x0 = req[0], y0 = req[1], x1 = req[2], y1 = req[3];
++        u8 value = gBgSprites_Unknown1[bg];
++        if ((y0 == y1) && (x0 == x1))
++            continue;
++
++        u16 cnt = gBgCntRegs[bg];
++        u8 *vramBase = (u8 *)VRAM + ((cnt & BGCNT_SCREENBASE_MASK) << 3);
++
++        if ((bg > 1) && ((gDispCnt & 0x3) != 0)) {
++            // Rotation/scaling background: one byte per entry.
++            u8 *base = vramBase + x0;
++            u32 rowBytes = (16 << (cnt >> 14)) & 0xFFFF;
++            if (y1 == 0xFF) {
++                s32 bytes = (s32)((req[3] - y0) * rowBytes);
++                memset(base + y0 * rowBytes, value, (size_t)((bytes / 2) * 2));
++            } else {
++                for (u32 row = y0; row <= y1; row = (row + 1) & 0xFF) {
++                    s32 n = (s32)(x1 - x0 + 1);
++                    memset(base + row * rowBytes, value, (size_t)((n / 2) * 2));
++                    if (row == 0xFF)
++                        break;
++                }
++            }
++        } else {
++            // Text background: one u16 per entry.
++            u16 *base = (u16 *)(vramBase + x0 * 2);
++            u32 rowEntries = 32;
++            if ((u8)((cnt >> 14) - 2) <= 1)
++                rowEntries = 64;
++            if (x1 == 0xFF) {
++                u32 n = (y1 - y0) * rowEntries;
++                u16 *p = base + y0 * rowEntries;
++                for (u32 i = 0; i < n; i++)
++                    p[i] = value;
++            } else {
++                for (u32 row = y0; row <= y1; row = (row + 1) & 0xFF) {
++                    u16 *p = base + row * rowEntries;
++                    for (u32 i = 0; i < x1 - x0 + 1; i++)
++                        p[i] = value;
++                    if (row == 0xFF)
++                        break;
++                }
++            }
++        }
++        req[0] = req[1] = req[2] = req[3] = 0;
++    }
++    return 1;
++}
++#else
+ NONMATCH("asm/non_matching/engine/sa2__sub_8004010.inc", u32 SA2_LABEL(sub_8004010)(void))
+ {
+     u8 bgIndex = 0;
+@@ -1246,6 +1307,7 @@
+     return 1;
+ }
+ END_NONMATCH
++#endif
+ 
+ #else
+ #define combine(v) ((v) << 8 | (v))

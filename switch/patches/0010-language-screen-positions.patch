@@ -1,0 +1,17 @@
+--- a/src/game/sa1/ui/edit_language_screen.c
++++ b/src/game/sa1/ui/edit_language_screen.c
+@@ -16,11 +16,10 @@
+ 
+ #define LANGSCRN_BG_SCREENBASE 30
+ 
+-#if !WIDESCREEN_HACK
++// SonAdvance-nx: the position tables come from the ROM as bytes; upstream's
++// widescreen build read them as u16 and got garbage (no text on this screen).
++// The screen is shown at the original 240x160, so the ROM bytes are right.
+ typedef u8 CoordELS;
+-#else
+-typedef u16 CoordELS;
+-#endif
+ 
+ extern const AnimId gUnknown_0868B6D4[NUM_LANGSCRN_SPRITES_TYPE_1][2];
+ extern const AnimId gUnknown_0868B6EC[][NUM_LANGSCRN_SPRITES_TYPE_2][2];

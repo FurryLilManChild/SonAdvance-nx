@@ -21,6 +21,7 @@
 
 #include "global.h"
 #include "core.h"
+#include "flags.h"
 #include "platform/shared/video/gpsp_renderer.h"
 #include "task.h"
 #include "game/globals.h"
@@ -156,6 +157,11 @@ void Harness_Frame(void)
 
     while (sStep < sNumSteps && sSteps[sStep].frame <= sFrame) {
         if (sSteps[sStep].end) {
+            extern u8 FLASH_BASE[];
+            u32 used = 0;
+            for (u32 i = 0; i < 64 * 1024; i++)
+                used += FLASH_BASE[i] != 0xFF;
+            fprintf(stderr, "harness: flash bytes in use %u, no-flash flag %d\n", used, (gFlags & FLAGS_NO_FLASH_MEMORY) != 0);
             fprintf(stderr, "harness: end at frame %u\n", sFrame);
             exit(0);
         }
@@ -180,6 +186,15 @@ void Harness_Frame(void)
         PAUSE_GRAPHICS_QUEUE();
         CreateSpecialStageIntro();
         fprintf(stderr, "harness: special stage at frame %u\n", sFrame);
+    }
+    if (getenv("OAMDUMP") && (int)sFrame == atoi(getenv("OAMDUMP"))) {
+        // Hardware sprite table at this frame (attr0 attr1 attr2), visible entries only.
+        for (int i = 0; i < 128; i++) {
+            const u16 *o = (const u16 *)&OAM[i * (OAM_SIZE / 128)];
+            if ((o[0] & 0x0300) == 0x0200)
+                continue; /* disabled */
+            fprintf(stderr, "oam %3d: %04x %04x %04x  y=%d x=%d tile=%d\n", i, o[0], o[1], o[2], o[0] & 0xFF, o[1] & 0x1FF, o[2] & 0x3FF);
+        }
     }
     if (WantCap(sFrame))
         SaveFrame(sFrame);

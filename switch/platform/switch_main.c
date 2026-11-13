@@ -129,6 +129,10 @@ static void LogClocks(const char *why)
 /* Crash handler: writes faulting context as offsets from the module start  */
 /* ------------------------------------------------------------------------ */
 
+/* Exit through the system's normal close path (as mp2-nx does), which
+ * avoids the "software was closed" error when quitting from the port menu. */
+u32 __nx_applet_exit_mode = 1;
+
 alignas(16) u8 __nx_exception_stack[0x4000];
 u64 __nx_exception_stack_size = sizeof(__nx_exception_stack);
 
@@ -627,6 +631,10 @@ static void CaptureFrame(u64 frame)
 extern const u8 default_font_bin[]; /* libnx console font: 8x8 glyphs stored at 2x (16x16, 1bpp) */
 
 static bool sMenuOpen;
+/* The paused game's picture, composed once when the menu opens. Composing it
+ * again every frame would re-run the game's per-line DMA transfers, walking
+ * their source pointers off the end (garbled picture, then a crash). */
+static uint16_t sMenuBackdrop[DISPLAY_WIDTH * DISPLAY_HEIGHT];
 static int sMenuCursor;
 static bool sExitRequested;
 static const char *const sMenuItems[] = { "Resume", "Exit game" };
@@ -659,7 +667,7 @@ static void MenuText(int x, int y, const char *str, u16 color, int vw, int vh)
         for (int gy = 0; gy < 8; gy++) {
             u16 row = (u16)(g[gy * 4] | (g[gy * 4 + 1] << 8));
             for (int gx = 0; gx < 8; gx++) {
-                if (!((row >> (gx * 2)) & 1))
+                if (!((row >> (15 - gx * 2)) & 1)) /* leftmost pixel is the high bit */
                     continue;
                 int px = x + gx, py = y + gy;
                 if (px >= 0 && px < vw && py >= 0 && py < vh)
@@ -810,10 +818,16 @@ void VBlankIntrWait(void)
 
     /* Port menu: the game stays paused (this call does not return to it)
      * until the menu closes. */
+    bool backdropReady = false;
     while (MenuUpdate()) {
         if (sExitRequested)
             Shutdown();
-        VDraw();
+        if (!backdropReady) {
+            VDraw();
+            memcpy(sMenuBackdrop, sGameImage, sizeof(sMenuBackdrop));
+            backdropReady = true;
+        }
+        memcpy(sGameImage, sMenuBackdrop, sizeof(sMenuBackdrop));
         MenuDraw(gGameStageTask == NULL);
         GfxPresent();
         if (!appletMainLoop())

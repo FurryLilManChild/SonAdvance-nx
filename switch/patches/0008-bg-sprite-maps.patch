@@ -1,0 +1,122 @@
+--- a/src/background.c
++++ b/src/background.c
+@@ -860,6 +860,107 @@
+     }
+ }
+ 
++#if PORTABLE
++// SonAdvance-nx: writes each queued background sprite's frame into its
++// background's tilemap, following sub_80039E4 (asm/non_matching/engine/
++// sa2__sub_80039E4.inc) step by step, including its quirks.
++static void SonAdv_WriteBgSpriteMaps(void)
++{
++    for (u32 n = 0; n < gBgSpritesCount; n++) {
++        Sprite *s = gBgSprites[n];
++        const SpriteOffset *dims = s->dimensions;
++        if (dims == (void *)-1)
++            continue;
++
++        u32 bgId = SPRITE_FLAG_GET(s, BG_ID);
++        u16 cnt = gBgCntRegs[bgId];
++        u8 *bgVram = (u8 *)BG_CHAR_ADDR((cnt & BGCNT_CHARBASE(3)) >> 2);
++        u8 *bgBase = (u8 *)VRAM + ((cnt & BGCNT_SCREENBASE_MASK) << 3);
++        u32 tileShift = (cnt & BGCNT_256COLOR) ? 6 : 5;
++        u32 tileBase = (u32)((size_t)((u8 *)s->graphics.dest - bgVram) >> tileShift);
++        const u16 *oamList = gRefSpriteTables->oamData[s->graphics.anim] + dims->oamIndex * 3;
++
++        if ((bgId >= 2) && ((gDispCnt & 0x3) != DISPCNT_MODE_0)) {
++            // Rotation/scaling background: one byte per map entry.
++            u32 rowTiles = ((1024 * 1024) << (cnt >> 14)) >> 16;
++            s8 rowStep = (s8)(u8)rowTiles;
++            for (u32 sub = 0; sub < dims->numSubframes; sub++) {
++                u16 a0 = oamList[sub * 3 + 0], a1 = oamList[sub * 3 + 1], a2 = oamList[sub * 3 + 2];
++                u32 ss = ((a0 >> 14) << 2) | (a1 >> 14);
++                u32 tilesX = gOamShapesSizes[ss][0] >> 3;
++                u32 tilesY = gOamShapesSizes[ss][1] >> 3;
++                s32 yPos = s->y - dims->offsetY;
++                s32 xPos = (s->x - dims->offsetX) & ~0xF;
++                u8 *row = bgBase + (((s32)(a0 & 0xFF) + yPos) >> 3) * rowTiles;
++                u16 tile = (u16)((tileBase + (a2 & 0x3FF)) & 0xFF);
++                for (u32 ty = 0; ty < tilesY; ty++) {
++                    u8 *p = row + (((s32)(a1 & 0x1FF) + xPos) >> 3);
++                    for (u32 tx = 0; tx < tilesX; tx++)
++                        *p++ = (u8)tile++;
++                    row += rowStep;
++                }
++            }
++        } else {
++            // Text background: one u16 per map entry (tile, flips, palette).
++            u32 rowEntries = 0x20;
++            if ((u8)((cnt >> 14) - 2) <= 1)
++                rowEntries = 0x40;
++            for (u32 sub = 0; sub < dims->numSubframes; sub++) {
++                u16 a0 = oamList[sub * 3 + 0], a1 = oamList[sub * 3 + 1], a2 = oamList[sub * 3 + 2];
++                u32 ss = ((a0 >> 14) << 2) | (a1 >> 14);
++                u32 tilesX = gOamShapesSizes[ss][0] >> 3;
++                u32 tilesY = gOamShapesSizes[ss][1] >> 3;
++                u16 oamX = a1 & 0x1FF;
++                u16 oamY = a0 & 0xFF;
++                s32 offY, offX;
++                a2 = (u16)(a2 + (s->palId << 12));
++
++                if ((((s->frameFlags >> SPRITE_FLAG_SHIFT_Y_FLIP) ^ (dims->flip >> 1)) & 1) != 0) {
++                    a1 ^= 0x2000;
++                    if (dims->flip & 1)
++                        offY = s->y + dims->offsetY;
++                    else
++                        offY = s->y + (dims->height - dims->offsetY);
++                    offY -= 8;
++                    oamY = (u16)-oamY;
++                } else {
++                    offY = s->y - dims->offsetY;
++                }
++
++                if (((s->frameFlags >> SPRITE_FLAG_SHIFT_X_FLIP) & 1) != (dims->flip & 1)) {
++                    a1 ^= 0x1000;
++                    if (dims->flip & 1)
++                        offX = s->x + dims->offsetX;
++                    else
++                        offX = s->x + (dims->width - dims->offsetX);
++                    offX -= 8;
++                    oamX = (u16)-oamX;
++                } else {
++                    offX = s->x - dims->offsetX;
++                }
++                offX &= ~0xF;
++                offY &= ~0x7;
++
++                s32 colStep = (a1 & 0x1000) ? -2 : 2;
++                s8 rowStep = (a1 & 0x2000) ? (s8)(u8)((u32)-(s32)(rowEntries << 25) >> 24) : (s8)(u8)((rowEntries << 25) >> 24);
++                u8 *row = bgBase + ((offY + (s16)oamY) >> 2) * rowEntries;
++                u16 entry = (u16)(tileBase + (a2 & 0xF3FF) + ((a1 & 0x3000) >> 2));
++                s32 colOff = ((s16)oamX + offX) >> 2;
++
++                for (u32 ty = 0; ty < tilesY; ty++) {
++                    u8 *p = row + colOff;
++                    for (u32 tx = 0; tx < tilesX; tx++) {
++                        *(u16 *)p = entry++;
++                        p += colStep;
++                    }
++                    row += rowStep;
++                }
++            }
++        }
++    }
++}
++#endif
++
+ // Some VBlank function
+ // (21.30%) https://decomp.me/scratch/UfJX7
+ NONMATCH("asm/non_matching/engine/sa2__sub_80039E4.inc", bool32 SA2_LABEL(sub_80039E4)(void))
+@@ -876,6 +977,11 @@
+ 
+ // TODO: once function matches this can be removed
+ #if PORTABLE
++    // SonAdvance-nx: the C below is unfinished, so on PC no "background
++    // sprite" (animated tiles placed in a background map, e.g. the circles on
++    // SA1's character select) was ever drawn. SonAdv_WriteBgSpriteMaps is a
++    // native version written from the original ARM routine.
++    SonAdv_WriteBgSpriteMaps();
+     gBgSpritesCount = 0;
+     return TRUE;
+ #endif

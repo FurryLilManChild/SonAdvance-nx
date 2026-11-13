@@ -10,6 +10,7 @@
  *   CAPS=list     comma list of frames to save, or "every:N".
  *   CAPDIR=dir    where frames go (default ./caps).
  *   LAYERS=hex    DISPCNT layer mask to keep while drawing (default 0x1F00).
+ *   RESULTS_AT=frame  show the end-of-act results (use with LEVEL).
  *   SPECIAL_AT=frame  enter the special stage (use with LEVEL).
  *   LEVEL=n LEVEL_AT=frame CHAR=c   jump straight into level n (0..13) at that
  *                 frame as character c (0 Sonic, 1 Tails, 2 Knuckles, 3 Amy).
@@ -45,7 +46,7 @@ static int sNumCaps;
 static const char *sCapDir = "caps";
 static u16 sLayerMask = 0x1F00;
 static int sInit;
-static int sLevel = -1, sLevelAt = -1, sChar, sSpecialAt = -1;
+static int sLevel = -1, sLevelAt = -1, sChar, sSpecialAt = -1, sResultsAt = -1;
 static uint16_t sImage[DISPLAY_WIDTH * DISPLAY_HEIGHT];
 
 static u16 ParseKeys(const char *s)
@@ -106,6 +107,8 @@ static void Init(void)
         sLevelAt = getenv("LEVEL_AT") ? atoi(getenv("LEVEL_AT")) : 400;
         sChar = getenv("CHAR") ? atoi(getenv("CHAR")) : 0;
     }
+    if (getenv("RESULTS_AT"))
+        sResultsAt = atoi(getenv("RESULTS_AT"));
     if (getenv("SPECIAL_AT"))
         sSpecialAt = atoi(getenv("SPECIAL_AT"));
     if (getenv("LAYERS"))
@@ -177,6 +180,11 @@ void Harness_Frame(void)
         gCurrentLevel = sLevel;
         ApplyGameStageSettingsAndStart();
         fprintf(stderr, "harness: started level %d at frame %u\n", sLevel, sFrame);
+    }
+    if ((int)sFrame == sResultsAt) {
+        extern u16 CreateStageResults(u32 courseTime, u16 ringCount, u8 spRingCount);
+        CreateStageResults(gCourseTime, gRingCount, 0);
+        fprintf(stderr, "harness: stage results at frame %u\n", sFrame);
     }
     if ((int)sFrame == sSpecialAt) {
         // Same steps the special spring takes (special_spring.c).

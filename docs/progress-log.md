@@ -2,6 +2,14 @@
 
 Newest first.
 
+## 2026-11-13: switch-test3 built
+
+- Mark's switch-test2 report: port menu text mirrored (wrong bit order in the font reader), game screen glitching behind the menu and a crash at RunDMAs (the menu re-ran the game's draw with its HBlank DMAs every frame; now a snapshot taken when the menu opens), crash on exit (applet exit mode set to 1; both logged sessions reached a clean exit, waiting on what Mark saw).
+- Saves were never written: the decomp's PC flash identify (v126 flash) reported "no flash", so the game skipped saving. Fixed (0009); harness shows the save written.
+- Language screen text missing in the wide build (coordinate type widened to 16 bits against 8-bit ROM data, 0010). SEGA logo garbage after it: the PC path of the BG map fill was wrong; native version from the ARM (0011).
+- Act title card laid out for widescreen (Mark chose a full re-layout, 0012/0013): right-hand pieces on the right edge, everything but the banner on the bottom edge as on the GBA, full-width strip and zone name, sprite cells past the screen edge skipped instead of wrapping at x 512.
+- End-of-act results laid out for widescreen (0014): strip and "GOT THROUGH" marquee full width and entering from past the right edge, bonus block centred, slide speeds scaled so every move takes the GBA's frame count. Two frame counts the decomp wrote as DISPLAY_WIDTH (240 frames) made the results last 186 frames longer in the wide build; restored to 240. Checked frame by frame against the 240x160 reference for act 1 and the act 2 exit.
+
 ## 2026-11-13: widescreen pass for switch-test2
 
 - Host harness (tools/host): headless Linux build driven by a button script, frame captures, jump to any level or the special stage; plus a 240x160 reference build of the same tree. mGBA installed in the workspace for real-cartridge comparisons.

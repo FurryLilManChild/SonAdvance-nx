@@ -1,0 +1,316 @@
+--- a/src/game/sa1/ui/stage_results.c	2026-11-13 16:45:44.884398635 -0500
++++ b/src/game/sa1/ui/stage_results.c	2026-11-13 16:45:44.885866706 -0500
+@@ -19,6 +19,31 @@
+ #include "constants/sa1/songs.h"
+ #include "constants/zones.h"
+ 
++// SonAdvance-nx: widescreen layout for the end-of-act results. On the GBA the
++// white strip and the "GOT THROUGH" marquee span the screen width and the bonus
++// lines sit in the middle. Here the strip and marquee get enough 32-pixel cells
++// for the full width and enter from past the right edge, the whole block is
++// centred in the 426x240 screen, and slide speeds scale so every move takes the
++// original number of frames. Two frame counts that the decomp wrote as
++// DISPLAY_WIDTH (0xF0 frames) stay 240 so the timing matches the GBA.
++#if WIDESCREEN_HACK
++#define WS_RIGHT      (DISPLAY_WIDTH - 240)
++#define WS_CX         ((DISPLAY_WIDTH - 240) / 2)
++#define WS_CY         ((DISPLAY_HEIGHT - 160) / 2)
++#define WS_CELLS32    ((DISPLAY_WIDTH - 240 + 31) / 32)
++#define WS_SPEED(v)   (((v) * DISPLAY_WIDTH) / 240)
++#else
++#define WS_RIGHT      0
++#define WS_CX         0
++#define WS_CY         0
++#define WS_CELLS32    0
++#define WS_SPEED(v)   (v)
++#endif
++#define RESULTS_FRAMES_F0 240
++
++// Strip cells: the ROM string has 9 cells; widescreen needs up to 9 + WS_CELLS32.
++static const u8 sWsStripCells[9 + WS_CELLS32 + 1] = { [0 ... 8 + WS_CELLS32] = 0x20 };
++
+ typedef struct {
+     /* 0x00 */ void *vram0;
+     /* 0x04 */ void *vram4;
+@@ -293,9 +318,9 @@
+     temp_r7->unk1C = 0;
+     temp_r7->unk30 = sp10;
+     temp_r7->unk1E = 0;
+-    temp_r7->unk0.qUnkA = 0xF0;
+-    temp_r7->unk0.unkC = 0x7E;
+-    temp_r7->unk0.unkE = 8;
++    temp_r7->unk0.qUnkA = 0xF0 + WS_RIGHT;
++    temp_r7->unk0.unkC = 0x7E + WS_CY;
++    temp_r7->unk0.unkE = 8 + WS_CELLS32;
+     temp_r7->unk0.unk10 = 8;
+     temp_r7->unk0.unk12 = 6;
+     temp_r7->unk0.unk16 = 1;
+@@ -306,9 +331,9 @@
+     temp_r7->unk1C = 0;
+     temp_r7->unk30 = sp10;
+     temp_r7->unk1E = 0;
+-    temp_r7->unk0.qUnkA = 0x100;
+-    temp_r7->unk0.unkC = 0x80;
+-    temp_r7->unk0.unkE = 9;
++    temp_r7->unk0.qUnkA = 0x100 + WS_RIGHT;
++    temp_r7->unk0.unkC = 0x80 + WS_CY;
++    temp_r7->unk0.unkE = 9 + WS_CELLS32;
+     temp_r7->unk0.unk10 = 2;
+     temp_r7->unk0.unk12 = 0xC;
+     temp_r7->unk0.unk16 = 1;
+@@ -509,7 +534,7 @@
+         }
+     }
+ 
+-    if (arg0->unk28 + DISPLAY_WIDTH < (u32)arg0->unk24) {
++    if (arg0->unk28 + RESULTS_FRAMES_F0 < (u32)arg0->unk24) {
+         if (!IS_FINAL_OR_EXTRA_STAGE(gCurrentLevel)) {
+             sub_805423C((StrcUi_805423C *)arg0);
+         }
+@@ -567,26 +592,26 @@
+                     arg0->unk0.unkE = arg0->unk0.unkE - 1;
+                 }
+             }
+-            arg0->unk0.qUnkA = arg0->unk0.qUnkA - 0x1A;
++            arg0->unk0.qUnkA = arg0->unk0.qUnkA - WS_SPEED(0x1A);
+         }
+     } else if (temp_r1 >= 50) {
+-        arg0->unk0.unkE = 9;
+-        arg0->unk0.unkC = 42;
++        arg0->unk0.unkE = 9 + WS_CELLS32;
++        arg0->unk0.unkC = 42 + WS_CY;
+     } else if (temp_r1 >= 36) {
+         arg0->unk0.unkC -= 6;
+     } else if (temp_r1 >= 26) {
+         arg0->unk0.qUnkA = -16;
+     } else if (temp_r1 >= 16) {
+-        arg0->unk0.qUnkA -= 26;
++        arg0->unk0.qUnkA -= WS_SPEED(26);
+ 
+         if (arg0->unk0.qUnkA < -16) {
+             arg0->unk0.qUnkA = -16;
+         }
+     }
+-    if ((u32)(arg0->unk30 + DISPLAY_WIDTH) < arg0->unk1C) {
+-        sub_8052F78((const char *)&gUnknown_0868841C[0], &arg0->unk0);
++    if ((u32)(arg0->unk30 + RESULTS_FRAMES_F0) < arg0->unk1C) {
++        sub_8052F78((const char *)&sWsStripCells[0], &arg0->unk0);
+     } else {
+-        sub_80530CC((const char *)&gUnknown_0868841C[0], &arg0->unk0);
++        sub_80530CC((const char *)&sWsStripCells[0], &arg0->unk0);
+     }
+ }
+ 
+@@ -611,7 +636,7 @@
+ 
+     temp_r1 = arg0->unk1C;
+     if ((u32)temp_r1 > (arg0->unk30 + 0xE6)) {
+-        arg0->unk0.qUnkA -= Q(28. / 256.);
++        arg0->unk0.qUnkA -= WS_SPEED(28);
+ 
+         if (arg0->unk0.qUnkA < -0x1F) {
+             if (arg0->unk0.unkE != 0) {
+@@ -623,7 +648,7 @@
+         }
+         sub_80530CC((const char *)&arr[arg0->unk1E], &arg0->unk0);
+     } else if (temp_r1 >= 50) {
+-        arg0->unk0.unkC = 0x2C;
++        arg0->unk0.unkC = 0x2C + WS_CY;
+         arg0->unk0.qUnkA -= Q(2. / 256.);
+ 
+         if (arg0->unk0.qUnkA < -0x1F) {
+@@ -644,7 +669,7 @@
+         sub_80530CC((const char *)&arr[arg0->unk1E], &arg0->unk0);
+     } else if (temp_r1 >= 26) {
+         arg0->unk0.qUnkA -= Q(2. / 256.);
+-        arg0->unk0.unkE = 9;
++        arg0->unk0.unkE = 9 + WS_CELLS32;
+ 
+         if (arg0->unk0.qUnkA < -0x1F) {
+             arg0->unk0.qUnkA += 0x20;
+@@ -653,10 +678,10 @@
+ 
+         sub_80530CC((const char *)&arr[arg0->unk1E], &arg0->unk0);
+     } else if (temp_r1 >= 16) {
+-        arg0->unk0.qUnkA -= Q(28. / 256.);
++        arg0->unk0.qUnkA -= WS_SPEED(28);
+ 
+         if (arg0->unk0.qUnkA < DISPLAY_WIDTH) {
+-            arg0->unk0.unkE = 9 - (arg0->unk0.qUnkA >> 5);
++            arg0->unk0.unkE = (9 + WS_CELLS32) - (arg0->unk0.qUnkA >> 5);
+             if (arg0->unk0.qUnkA < -0x1F) {
+                 arg0->unk0.qUnkA += Q(32. / 256.);
+                 arg0->unk1E = Mod(arg0->unk1E + 1, 8);
+@@ -711,7 +736,7 @@
+ 
+     if (arg0->unk1C > (u32)(arg0->unk30 + 0xE6)) {
+         s32 v = (arg0->unk1C - 0xE6);
+-        var_r7_2 = (v - arg0->unk30) * 0x1C;
++        var_r7_2 = (v - arg0->unk30) * WS_SPEED(0x1C);
+     } else {
+         var_r7_2 = 0;
+     }
+@@ -720,8 +745,8 @@
+         arg0->unk0.unk10 = 4;
+         arg0->unk0.unk12 = 6;
+         arg0->unk0.unkE = 0xA;
+-        arg0->unk0.qUnkA = 50 - var_r7_2;
+-        arg0->unk0.unkC = 0x66;
++        arg0->unk0.qUnkA = 50 + WS_CX - var_r7_2;
++        arg0->unk0.unkC = 0x66 + WS_CY;
+ 
+         if (arg0->unk0.qUnkA >= -80) {
+             sub_80530CC((const char *)arg0->unk20, &arg0->unk0);
+@@ -734,7 +759,7 @@
+         for (var_r6 = 11; var_r6 < 16; var_r6++) {
+             if (arg0->unk20[var_r6] != 0x2B) {
+                 s32 v = var_r7_2 - 50;
+-                arg0->unk0.qUnkA = (var_r6 * 8) - v;
++                arg0->unk0.qUnkA = (var_r6 * 8) - v + WS_CX;
+                 if (arg0->unk0.qUnkA >= -8) {
+                     sub_80530CC((const char *)&arg0->unk20[var_r6], &arg0->unk0);
+                 }
+@@ -744,8 +769,8 @@
+         arg0->unk0.unk10 = 4;
+         arg0->unk0.unk12 = 6;
+         arg0->unk0.unkE = 0xA;
+-        arg0->unk0.qUnkA = 0x32;
+-        arg0->unk0.unkC = 0x66;
++        arg0->unk0.qUnkA = 0x32 + WS_CX;
++        arg0->unk0.unkC = 0x66 + WS_CY;
+         sub_80530CC((const char *)arg0->unk20, &arg0->unk0);
+ 
+         for (var_r6 = 11; (var_r6 < 15); var_r6++) {
+@@ -756,7 +781,7 @@
+         arg0->unk0.unk10 = 0;
+         arg0->unk0.unk12 = 6;
+         arg0->unk0.unkE = 16 - var_r6;
+-        arg0->unk0.qUnkA = (var_r6 * 8) - (var_r7_2 -= 50);
++        arg0->unk0.qUnkA = (var_r6 * 8) - (var_r7_2 -= 50) + WS_CX;
+         sub_80530CC((const char *)&arg0->unk20[var_r6], &arg0->unk0);
+     } else {
+         s32 var_sb = (u8)Div(sp0, 2);
+@@ -786,14 +811,14 @@
+                     } else {
+                         if ((var_r6 < 11) || (arg0->unk20[var_r6] != 0x2B)) {
+                             arg0->unk0.unkE = 1;
+-                            arg0->unk0.unkC = Div(0x100 - (var_r7_2 * 0x15), 0x23) + 0x5E;
++                            arg0->unk0.unkC = Div(0x100 - (var_r7_2 * 0x15), 0x23) + 0x5E + WS_CY;
+                             if (var_r7_2 == 0xC) {
+                                 *((u16 *)&arg0->unk0.unk6) = 0x1F;
+                             } else {
+                                 *((u16 *)&arg0->unk0.unk6) = var_r7_2 + 0x14;
+                             }
+ 
+-                            arg0->unk0.qUnkA = (var_r6 * 8) + 0x2E;
++                            arg0->unk0.qUnkA = (var_r6 * 8) + 0x2E + WS_CX;
+                             sub_8052E40(&arg0->unk20[var_r6], (void *)&arg0->unk0);
+                         }
+                     }
+@@ -809,8 +834,8 @@
+                 arg0->unk0.unk10 = 0;
+                 arg0->unk0.unk12 = 6;
+                 arg0->unk0.unkE = var_sl - var_r6;
+-                arg0->unk0.unkC = 0x66;
+-                arg0->unk0.qUnkA = (var_r6 * 8) + 0x32;
++                arg0->unk0.unkC = 0x66 + WS_CY;
++                arg0->unk0.qUnkA = (var_r6 * 8) + 0x32 + WS_CX;
+                 sub_80530CC((const char *)&arg0->unk20[var_r6], &arg0->unk0);
+                 var_sl = 11;
+             }
+@@ -818,8 +843,8 @@
+             arg0->unk0.unk10 = 4;
+             arg0->unk0.unk12 = 6;
+             arg0->unk0.unkE = var_sl;
+-            arg0->unk0.unkC = 0x66;
+-            arg0->unk0.qUnkA = 0x32;
++            arg0->unk0.unkC = 0x66 + WS_CY;
++            arg0->unk0.qUnkA = 0x32 + WS_CX;
+             sub_80530CC((const char *)arg0->unk20, &arg0->unk0);
+         }
+     }
+@@ -867,7 +892,7 @@
+ 
+     if (arg0->unk1C > (u32)(arg0->unk30 + 0xE6)) {
+         s32 v = (arg0->unk1C - 0xE6);
+-        var_r7_2 = (v - arg0->unk30) * 0x1C;
++        var_r7_2 = (v - arg0->unk30) * WS_SPEED(0x1C);
+     } else {
+         var_r7_2 = 0;
+     }
+@@ -876,8 +901,8 @@
+         arg0->unk0.unk10 = 4;
+         arg0->unk0.unk12 = 6;
+         arg0->unk0.unkE = 0xA;
+-        arg0->unk0.qUnkA = 50 - var_r7_2;
+-        arg0->unk0.unkC = 80;
++        arg0->unk0.qUnkA = 50 + WS_CX - var_r7_2;
++        arg0->unk0.unkC = 80 + WS_CY;
+ 
+         if (arg0->unk0.qUnkA >= -80) {
+             sub_80530CC((const char *)arg0->unk20, &arg0->unk0);
+@@ -890,7 +915,7 @@
+         for (var_r6 = 11; var_r6 < 16; var_r6++) {
+             if (arg0->unk20[var_r6] != 0x2B) {
+                 s32 v = var_r7_2 - 50;
+-                arg0->unk0.qUnkA = (var_r6 * 8) - v;
++                arg0->unk0.qUnkA = (var_r6 * 8) - v + WS_CX;
+                 if (arg0->unk0.qUnkA >= -8) {
+                     sub_80530CC((const char *)&arg0->unk20[var_r6], &arg0->unk0);
+                 }
+@@ -900,8 +925,8 @@
+         arg0->unk0.unk10 = 4;
+         arg0->unk0.unk12 = 6;
+         arg0->unk0.unkE = 0xA;
+-        arg0->unk0.qUnkA = 0x32;
+-        arg0->unk0.unkC = 80;
++        arg0->unk0.qUnkA = 0x32 + WS_CX;
++        arg0->unk0.unkC = 80 + WS_CY;
+         sub_80530CC((const char *)arg0->unk20, &arg0->unk0);
+ 
+         for (var_r6 = 11; (var_r6 < 15); var_r6++) {
+@@ -912,7 +937,7 @@
+         arg0->unk0.unk10 = 0;
+         arg0->unk0.unk12 = 6;
+         arg0->unk0.unkE = 16 - var_r6;
+-        arg0->unk0.qUnkA = (var_r6 * 8) - (var_r7_2 -= 50);
++        arg0->unk0.qUnkA = (var_r6 * 8) - (var_r7_2 -= 50) + WS_CX;
+         sub_80530CC((const char *)&arg0->unk20[var_r6], &arg0->unk0);
+     } else {
+         s32 var_sb = (u8)Div(sp0, 2);
+@@ -942,11 +967,11 @@
+                     } else {
+                         if ((var_r6 < 11) || (arg0->unk20[var_r6] != 0x2B)) {
+                             arg0->unk0.unkE = 1;
+-                            arg0->unk0.unkC = Div(0x100 - (var_r7_2 * 0x15), 0x23) + 0x48;
++                            arg0->unk0.unkC = Div(0x100 - (var_r7_2 * 0x15), 0x23) + 0x48 + WS_CY;
+ 
+                             *((u16 *)&arg0->unk0.unk6) = var_r7_2 + 0x14;
+ 
+-                            arg0->unk0.qUnkA = (var_r6 * 8) + 0x2E;
++                            arg0->unk0.qUnkA = (var_r6 * 8) + 0x2E + WS_CX;
+                             sub_8052E40(&arg0->unk20[var_r6], (void *)&arg0->unk0);
+                         }
+                     }
+@@ -962,8 +987,8 @@
+                 arg0->unk0.unk10 = 0;
+                 arg0->unk0.unk12 = 6;
+                 arg0->unk0.unkE = var_sl - var_r6;
+-                arg0->unk0.unkC = 80;
+-                arg0->unk0.qUnkA = (var_r6 * 8) + 0x32;
++                arg0->unk0.unkC = 80 + WS_CY;
++                arg0->unk0.qUnkA = (var_r6 * 8) + 0x32 + WS_CX;
+                 sub_80530CC((const char *)&arg0->unk20[var_r6], &arg0->unk0);
+                 var_sl = 11;
+             }
+@@ -971,8 +996,8 @@
+             arg0->unk0.unk10 = 4;
+             arg0->unk0.unk12 = 6;
+             arg0->unk0.unkE = var_sl;
+-            arg0->unk0.unkC = 80;
+-            arg0->unk0.qUnkA = 0x32;
++            arg0->unk0.unkC = 80 + WS_CY;
++            arg0->unk0.qUnkA = 0x32 + WS_CX;
+             sub_80530CC((const char *)arg0->unk20, &arg0->unk0);
+         }
+     }

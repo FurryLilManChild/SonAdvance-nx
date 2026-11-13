@@ -1,0 +1,30 @@
+# Game data: never commit
+*.gba
+*.sav
+assets/
+baserom*
+
+# Build output
+build/
+out/
+*.nro
+*.nacp
+*.elf
+*.map
+*.o
+*.dksh
+
+# Generated / extracted data
+generated/
+*.4bpp
+*.8bpp
+*.gbapal
+*.lz
+*.rl
+*.bin
+
+# Captures and logs
+switchlogs/
+*.log
+*.bmp
+*.png.capture

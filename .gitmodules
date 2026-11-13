@@ -1,0 +1,3 @@
+[submodule "upstream/sa2"]
+	path = upstream/sa2
+	url = https://github.com/SAT-R/sa2

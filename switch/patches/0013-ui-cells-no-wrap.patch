@@ -1,0 +1,36 @@
+--- a/src/game/sa1/stage/ui_rendering.c
++++ b/src/game/sa1/stage/ui_rendering.c
+@@ -342,6 +342,16 @@
+     if (param1->unk16 != 0) {
+         s32 i;
+         for (i = 0; i < param1->unkE; i++) {
++#if WIDESCREEN_HACK
++            // SonAdvance-nx: sprite x wraps at 512, so on a 426-wide screen a
++            // cell placed past the right edge would reappear at the left.
++            // Skip cells that are fully off screen instead.
++            s32 cellX = param1->qUnkA + i * r9;
++            if (cellX >= DISPLAY_WIDTH || cellX + r9 <= 0) {
++                sp00.all.attr1 += r9;
++                continue;
++            }
++#endif
+             OamData *oam = OamMalloc((param1->unk8) >> 3);
+ 
+             if (iwram_end == oam) {
+@@ -408,6 +418,16 @@
+     if (param1->unk16 != 0) {
+         s32 i;
+         for (i = 0; i < param1->unkE; i++) {
++#if WIDESCREEN_HACK
++            // SonAdvance-nx: sprite x wraps at 512, so on a 426-wide screen a
++            // cell placed past the right edge would reappear at the left.
++            // Skip cells that are fully off screen instead.
++            s32 cellX = param1->qUnkA + i * r9;
++            if (cellX >= DISPLAY_WIDTH || cellX + r9 <= 0) {
++                sp00.all.attr1 += r9;
++                continue;
++            }
++#endif
+             OamData *oam = OamMalloc((param1->unk8) >> 3);
+ 
+             if (iwram_end == oam) {

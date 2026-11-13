@@ -1,0 +1,253 @@
+--- a/src/game/sa1/stage/stage_ui_z.c
++++ b/src/game/sa1/stage/stage_ui_z.c
+@@ -15,6 +15,31 @@
+ #include "constants/sa1/vram_hardcoded.h"
+ #include "constants/zones.h"
+ 
++// SonAdvance-nx: widescreen layout for the act title card. On the GBA the card
++// is laid out against the screen edges: the banner on the left (full height),
++// the katakana and "ACT" on the right, the strip and scrolling zone name across
++// the width, all against the bottom (ACT enters from just below the screen).
++// Here the right-hand pieces move to the right edge and everything but the
++// banner moves down to the bottom edge; the strip and name get enough 32-pixel
++// cells for the full width; the banner gets enough rows for the full height;
++// starting points stay off screen; slide speeds scale so every move takes the
++// original number of frames.
++#if WIDESCREEN_HACK
++#define WS_RIGHT          (DISPLAY_WIDTH - 240)
++#define WS_DOWN           (DISPLAY_HEIGHT - 160)
++#define WS_CELLS32        ((DISPLAY_WIDTH - 240 + 31) / 32)
++#define WS_ROWS32         ((DISPLAY_HEIGHT - 160 + 31) / 32)
++#define WS_SPEED(v)       (((v) * DISPLAY_WIDTH) / 240)
++#define WS_OFFSCREEN(x)   (((x) + WS_RIGHT) > 504 ? 504 : ((x) + WS_RIGHT))
++#else
++#define WS_RIGHT          0
++#define WS_DOWN           0
++#define WS_CELLS32        0
++#define WS_ROWS32         0
++#define WS_SPEED(v)       (v)
++#define WS_OFFSCREEN(x)   (x)
++#endif
++
+ void Task_8055458(void);
+ void Task_8055730(void);
+ void Task_8055798(void);
+@@ -297,14 +322,14 @@
+ 
+     if ((gCurrentLevel <= LEVEL_INDEX(ZONE_7, ACT_1)) && ((gCurrentLevel & 0x1) != ACT_1) && (gFinalBossActive != gCurrentLevel)
+         && (!IS_EXTRA_STAGE(gCurrentLevel))) {
+-        for (i = 0; i < 8; i++) {
++        for (i = 0; i < 8 + WS_CELLS32; i++) {
+             OamData *oam = OamMalloc(UI_OAM_ORDER_INDEX);
+ 
+             if (iwram_end == oam) {
+                 break;
+             }
+ 
+-            oam->all.attr0 = 0x400 | 42;
++            oam->all.attr0 = 0x400 | (42 + WS_DOWN);
+             oam->all.attr1 = i * 32 + ~0x7FFF;
+             oam->all.attr2 = 0x6080;
+         }
+@@ -327,7 +352,7 @@
+     ui_24->unk0.unk10 = 6;
+     ui_24->unk0.unk16 = 0;
+     ui_24->unk0.unk12 = 15;
+-    ui_24->unk0.unk14 = 5;
++    ui_24->unk0.unk14 = 5 + WS_ROWS32;
+     ui_24->unk1C = VramMalloc(32);
+     sp04.vram4 = ui_24->unk1C;
+     ui_24->unk21 = 0;
+@@ -357,8 +382,8 @@
+     ui_24->unk18 = 0;
+     ui_24->unk20 = 1;
+     ui_24->unk1A = 0;
+-    ui_24->unk0.qUnkA = +Q(180. / 256.);
+-    ui_24->unk0.unkC = 160;
++    ui_24->unk0.qUnkA = +Q(180. / 256.) + WS_RIGHT;
++    ui_24->unk0.unkC = 160 + WS_DOWN;
+     ui_24->unk0.unkE = 6;
+     ui_24->unk0.unk10 = 10;
+     ui_24->unk0.unk12 = 6;
+@@ -377,14 +402,14 @@
+ 
+     if (((gCurrentLevel & 0x1) != ACT_1) && (gFinalBossActive != gCurrentLevel) && (!IS_EXTRA_STAGE(gCurrentLevel))) {
+         ui_24->unk0.qUnkA = -Q(16. / 256.);
+-        ui_24->unk0.unkC = +42;
++        ui_24->unk0.unkC = +42 + WS_DOWN;
+ 
+     } else {
+-        ui_24->unk0.qUnkA = +Q(240. / 256.);
+-        ui_24->unk0.unkC = 126;
++        ui_24->unk0.qUnkA = +Q(240. / 256.) + WS_RIGHT;
++        ui_24->unk0.unkC = 126 + WS_DOWN;
+     }
+ 
+-    ui_24->unk0.unkE = 8;
++    ui_24->unk0.unkE = 8 + WS_CELLS32;
+     ui_24->unk0.unk10 = 8;
+     ui_24->unk0.unk12 = 6;
+     ui_24->unk0.unk16 = 1;
+@@ -399,8 +424,8 @@
+     ui_24->unk18 = 0;
+     ui_24->unk20 = 1;
+     ui_24->unk1A = 0;
+-    ui_24->unk0.qUnkA = +Q(360. / 256.);
+-    ui_24->unk0.unkC = 114;
++    ui_24->unk0.qUnkA = WS_OFFSCREEN(Q(360. / 256.));
++    ui_24->unk0.unkC = 114 + WS_DOWN;
+     ui_24->unk0.unkE = 4;
+     ui_24->unk0.unk10 = 9;
+     ui_24->unk0.unk12 = 6;
+@@ -415,9 +440,9 @@
+     ui_24->unk18 = 0;
+     ui_24->unk20 = 1;
+     ui_24->unk1A = 0;
+-    ui_24->unk0.qUnkA = +Q(1.0);
+-    ui_24->unk0.unkC = 128;
+-    ui_24->unk0.unkE = 9;
++    ui_24->unk0.qUnkA = +Q(1.0) + WS_RIGHT;
++    ui_24->unk0.unkC = 128 + WS_DOWN;
++    ui_24->unk0.unkE = 9 + WS_CELLS32;
+     ui_24->unk0.unk10 = 2;
+     ui_24->unk0.unk12 = 6;
+     ui_24->unk0.unk16 = 1;
+@@ -654,15 +679,15 @@
+     Strc_Ui_24 *strc = TASK_DATA(gCurTask);
+ 
+     if (strc->unk18 > 215) {
+-        if (strc->unk0.unkC < 160) {
++        if (strc->unk0.unkC < 160 + WS_DOWN) {
+             strc->unk0.unkC += 2;
+         }
+     } else if (strc->unk18 > 35) {
+-        strc->unk0.qUnkA = Q(180. / 256.);
+-        strc->unk0.unkC = 144;
++        strc->unk0.qUnkA = Q(180. / 256.) + WS_RIGHT;
++        strc->unk0.unkC = 144 + WS_DOWN;
+         strc->unk0.unkE = 6;
+     } else if (strc->unk18 > 30) {
+-        if (strc->unk0.unkC > 144) {
++        if (strc->unk0.unkC > 144 + WS_DOWN) {
+             strc->unk0.unkC -= 3;
+         }
+     }
+@@ -689,14 +714,14 @@
+             }
+         }
+ 
+-        strc->unk0.qUnkA -= Q(26. / 256.);
++        strc->unk0.qUnkA -= WS_SPEED(Q(26. / 256.));
+     } else if (strc->unk18 > 25) {
+         strc->unk0.qUnkA = -Q(16. / 256.);
+     } else if (strc->unk18 > 15) {
+         if (IS_EXTRA_STAGE(gCurrentLevel)) {
+             // Extra Stage
+-            strc->unk0.unkC = 126;
+-            strc->unk0.qUnkA -= Q(26. / 256);
++            strc->unk0.unkC = 126 + WS_DOWN;
++            strc->unk0.qUnkA -= WS_SPEED(Q(26. / 256));
+ 
+             if (strc->unk0.qUnkA < -Q(16. / 256.)) {
+                 strc->unk0.qUnkA = -Q(16. / 256.);
+@@ -707,13 +732,13 @@
+             strc->unk0.qUnkA = -Q(16. / 256.);
+             strc->unk0.unkC += 9;
+ 
+-            if (strc->unk0.unkC > 126) {
+-                strc->unk0.unkC = 126;
++            if (strc->unk0.unkC > 126 + WS_DOWN) {
++                strc->unk0.unkC = 126 + WS_DOWN;
+             }
+         } else {
+             // Multiplayer Stage
+-            strc->unk0.unkC = 126;
+-            strc->unk0.qUnkA -= Q(26. / 256);
++            strc->unk0.unkC = 126 + WS_DOWN;
++            strc->unk0.qUnkA -= WS_SPEED(Q(26. / 256));
+ 
+             if (strc->unk0.qUnkA < -Q(16. / 256.)) {
+                 strc->unk0.qUnkA = -Q(16. / 256.);
+@@ -721,11 +746,22 @@
+         }
+     }
+ 
++#if WIDESCREEN_HACK
++    // The strip's ROM string has 8 cells; the widescreen strip needs more, so
++    // extend it with its last (blank) cell rather than reading past the end.
++    char stripCells[8 + WS_CELLS32];
++    for (s32 c = 0; c < (s32)sizeof(stripCells); c++)
++        stripCells[c] = gUnknown_086883B8[c < 8 ? c : 7];
++#define STRIP_CELLS stripCells
++#else
++#define STRIP_CELLS (&gUnknown_086883B8[0])
++#endif
+     if ((strc->unk18 >= 0 && strc->unk18 <= 105) || !strc->unk20 || (strc->unk21 != 0)) {
+-        sub_8052F78((const char *)&gUnknown_086883B8[0], (void *)strc);
++        sub_8052F78((const char *)STRIP_CELLS, (void *)strc);
+     } else {
+-        sub_80530CC((const char *)&gUnknown_086883B8[0], (void *)strc);
++        sub_80530CC((const char *)STRIP_CELLS, (void *)strc);
+     }
++#undef STRIP_CELLS
+ }
+ 
+ void Task_8055AA0()
+@@ -733,16 +769,16 @@
+     Strc_Ui_24 *strc = TASK_DATA(gCurTask);
+ 
+     if (strc->unk18 > 215) {
+-        strc->unk0.qUnkA -= Q(26. / 256.);
++        strc->unk0.qUnkA -= WS_SPEED(Q(26. / 256.));
+     } else if (strc->unk18 > 25) {
+-        strc->unk0.qUnkA = Q(112 / 256.);
++        strc->unk0.qUnkA = Q(112 / 256.) + WS_RIGHT;
+ 
+         // TODO: Match without cast!
+     } else if ((u16)strc->unk18 > 15) {
+         strc->unk0.qUnkA -= Q(26. / 256.);
+ 
+-        if (strc->unk0.qUnkA < Q(112. / 256.)) {
+-            strc->unk0.qUnkA = Q(112. / 256.);
++        if (strc->unk0.qUnkA < Q(112. / 256.) + WS_RIGHT) {
++            strc->unk0.qUnkA = Q(112. / 256.) + WS_RIGHT;
+         }
+     }
+ 
+@@ -767,7 +803,7 @@
+         if (strc->unk18 > 215) {
+             u16 qInitialUnkA = strc->unk0.qUnkA;
+ 
+-            strc->unk0.qUnkA -= Q(28. / 256.);
++            strc->unk0.qUnkA -= WS_SPEED(Q(28. / 256.));
+ 
+             if (strc->unk0.qUnkA < -Q(31. / 256.)) {
+                 strc->unk0.unkE--;
+@@ -783,7 +819,7 @@
+         } else if (strc->unk18 > 25) {
+             u16 qInitialUnkA = strc->unk0.qUnkA;
+             strc->unk0.qUnkA = qInitialUnkA - Q(2. / 256.);
+-            strc->unk0.unkE = 9;
++            strc->unk0.unkE = 9 + WS_CELLS32;
+ 
+             if (strc->unk0.qUnkA < -Q(31. / 256.)) {
+                 strc->unk0.qUnkA = qInitialUnkA + Q(30. / 256.);
+@@ -798,14 +834,14 @@
+         } else if (strc->unk18 > 15) {
+             // _08055BC0
+             u16 qInitialUnkA;
+-            strc->unk0.unkC = 0x80;
++            strc->unk0.unkC = 0x80 + WS_DOWN;
+ 
+             qInitialUnkA = strc->unk0.qUnkA;
+ 
+-            strc->unk0.qUnkA -= Q(28. / 256.);
++            strc->unk0.qUnkA -= WS_SPEED(Q(28. / 256.));
+ 
+-            if (strc->unk0.qUnkA < Q(240. / 256.)) {
+-                strc->unk0.unkE = 9 - (strc->unk0.qUnkA >> 5);
++            if (strc->unk0.qUnkA < Q(240. / 256.) + WS_RIGHT) {
++                strc->unk0.unkE = 9 + WS_CELLS32 - (strc->unk0.qUnkA >> 5);
+ 
+                 if (strc->unk0.qUnkA < -Q(31. / 256.)) {
+                     strc->unk0.qUnkA = qInitialUnkA + 4;

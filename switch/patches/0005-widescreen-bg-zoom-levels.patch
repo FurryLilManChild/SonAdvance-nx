@@ -1,0 +1,48 @@
+--- /dev/null
++++ b/src/platform/shared/wide_bg.c
+@@ -0,0 +1,45 @@
++// SonAdvance-nx: widescreen background choices per stage.
++// Some far backgrounds have art only for the GBA's 160 lines; below that the
++// tilemap holds nothing meant to be seen. For those, the background layer is
++// drawn 1.5x larger (gpsp renderer, gWideBgZoom), which shows exactly the
++// original 160 lines of art across the 240-line widescreen picture.
++#include "global.h"
++#include "core.h"
++#include "game/globals.h"
++#include "game/shared/stage/stage.h"
++
++#if WIDESCREEN_HACK && (GAME == GAME_SA1)
++extern u8 gWideBgZoom[4];
++extern u8 gWideBgRowMapOn[4];
++extern s16 gWideBgRowMap[4][DISPLAY_HEIGHT];
++
++// Bit n set: zoom background layer n. Indexed by level (gCurrentLevel).
++static const u8 sZoomLayers[NUM_LEVEL_IDS] = {
++    [LEVEL_INDEX(ZONE_5, ACT_1)] = 1 << 3, // Angel Island 1
++    [LEVEL_INDEX(ZONE_5, ACT_2)] = 1 << 3, // Angel Island 2
++    [LEVEL_INDEX(ZONE_6, ACT_2)] = 1 << 3, // Cosmic Angel
++    [LEVEL_INDEX(ZONE_7, ACT_1)] = 1 << 3, // X Zone
++};
++
++void WideBg_Update(void)
++{
++    u8 mask = 0;
++    if (gGameStageTask != NULL && gCurrentLevel >= 0 && gCurrentLevel < NUM_LEVEL_IDS)
++        mask = sZoomLayers[gCurrentLevel];
++    for (int i = 0; i < 4; i++) {
++        gWideBgZoom[i] = (mask >> i) & 1;
++        gWideBgRowMapOn[i] = 0;
++    }
++
++    // Moon: the surface art ends at line 160 (layer 1); the extra lines draw
++    // from the nearest 32 rows of surface, stretched. The scroll for those
++    // lines is filled in by the stage's background code.
++    if (gGameStageTask != NULL && gCurrentLevel == LEVEL_INDEX(ZONE_7, ACT_2)) {
++        for (int line = 0; line < DISPLAY_HEIGHT; line++)
++            gWideBgRowMap[1][line] = line < 160 ? -1 : (s16)(128 + ((line - 160) * 32) / (DISPLAY_HEIGHT - 160));
++        gWideBgRowMapOn[1] = 1;
++    }
++}
++#else
++void WideBg_Update(void) { }
++#endif

@@ -1,0 +1,66 @@
+--- a/src/platform/shared/video/gpsp_renderer.cc
++++ b/src/platform/shared/video/gpsp_renderer.cc
+@@ -604,9 +604,63 @@
+     }
+ }
+ 
++// SonAdvance-nx: per-layer background zoom for widescreen. A zoomed text
++// layer is drawn 1.5x larger (screen x and line map to 2/3 of themselves in
++// background space), so far-background art made for 160 lines fills 240.
++extern "C" u8 gWideBgZoom[4];
++u8 gWideBgZoom[4];
++// Per-line source row override for a layer (-1 = normal), used where a
++// background's art ends at line 160 and the extra lines repeat nearby rows.
++extern "C" u8 gWideBgRowMapOn[4];
++extern "C" s16 gWideBgRowMap[4][DISPLAY_HEIGHT];
++u8 gWideBgRowMapOn[4];
++s16 gWideBgRowMap[4][DISPLAY_HEIGHT];
++
++template <typename stype, rendtype rdtype, bool isbase>
++static void render_scanline_text_inner(u32 layer, u32 start, u32 end, void *scanline, const u16 *paltbl);
++
+ template <typename stype, rendtype rdtype, bool isbase>
+ static void render_scanline_text(u32 layer, u32 start, u32 end, void *scanline, const u16 *paltbl)
+ {
++    if (!gWideBgZoom[layer]) {
++        u16 line = read_ioreg(REG_ADDR_VCOUNT);
++        s16 row = (gWideBgRowMapOn[layer] && line < DISPLAY_HEIGHT) ? gWideBgRowMap[layer][line] : -1;
++        if (row >= 0) {
++            REG_VCOUNT = (u16)((row - read_ioreg(REG_ADDR_BGxVOFS(layer))) & 0x1FF);
++            render_scanline_text_inner<stype, rdtype, isbase>(layer, start, end, scanline, paltbl);
++            REG_VCOUNT = line;
++        } else {
++            render_scanline_text_inner<stype, rdtype, isbase>(layer, start, end, scanline, paltbl);
++        }
++        return;
++    }
++
++    static stype tmp[DISPLAY_WIDTH + 8];
++    const stype marker = (stype)~(stype)0;
++    stype *out = (stype *)scanline;
++    u32 s0 = (start * 2) / 3;
++    u32 s1 = ((end * 2) + 2) / 3 + 1;
++    if (s1 > DISPLAY_WIDTH)
++        s1 = DISPLAY_WIDTH;
++
++    for (u32 i = s0; i < s1; i++)
++        tmp[i] = marker;
++
++    u16 line = read_ioreg(REG_ADDR_VCOUNT);
++    REG_VCOUNT = (line * 2) / 3;
++    render_scanline_text_inner<stype, rdtype, isbase>(layer, s0, s1, tmp, paltbl);
++    REG_VCOUNT = line;
++
++    for (u32 x = start; x < end; x++) {
++        stype v = tmp[(x * 2) / 3];
++        if (v != marker)
++            out[x] = v;
++    }
++}
++
++template <typename stype, rendtype rdtype, bool isbase>
++static void render_scanline_text_inner(u32 layer, u32 start, u32 end, void *scanline, const u16 *paltbl)
++{
+     // Tile mode has 4 and 8 bpp modes.
+     u32 bg_control = read_ioreg(REG_ADDR_BGxCNT(layer));
+     bool is8bpp = (read_ioreg(REG_ADDR_BGxCNT(layer)) & 0x80);

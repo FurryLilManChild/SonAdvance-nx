@@ -1,0 +1,269 @@
+--- a/src/game/sa1/menus/mp_mode_select.c
++++ b/src/game/sa1/menus/mp_mode_select.c
+@@ -14,6 +14,7 @@
+ #include "constants/sa1/songs.h"
+ #include "constants/sa1/tilemaps.h"
+ #include "constants/sa1/text.h"
++#include "sonadv_classic.h"
+ 
+ /* NOTE:
+    This module was split into two, because Task_800F9BC() would compile
+--- a/src/game/sa1/menus/mp_mode_select_2.c
++++ b/src/game/sa1/menus/mp_mode_select_2.c
+@@ -21,6 +21,7 @@
+ #include "constants/sa1/songs.h"
+ #include "constants/sa1/tilemaps.h"
+ #include "constants/sa1/text.h"
++#include "sonadv_classic.h"
+ 
+ /* NOTE:
+    This module was split into two, because sa2__sub_80818B8() would compile
+--- a/src/game/sa1/menus/options.c
++++ b/src/game/sa1/menus/options.c
+@@ -15,6 +15,7 @@
+ #include "constants/sa1/anim_sizes.h"
+ #include "constants/sa1/songs.h"
+ #include "constants/sa1/text.h" // for UILANG_COUNT
++#include "sonadv_classic.h"
+ 
+ typedef struct {
+     /* 0x000 */ Sprite s0;
+--- a/src/game/sa1/menus/player_data.c
++++ b/src/game/sa1/menus/player_data.c
+@@ -14,6 +14,7 @@
+ #include "constants/sa1/anim_sizes.h"
+ #include "constants/sa1/songs.h"
+ #include "constants/sa1/text.h" // for UILANG_COUNT
++#include "sonadv_classic.h"
+ 
+ typedef enum EPDM_Options {
+     PDM_OPTION_SELECT_NAME,
+--- a/src/game/sa1/menus/time_attack.c
++++ b/src/game/sa1/menus/time_attack.c
+@@ -10,6 +10,7 @@
+ 
+ #include "constants/sa1/songs.h"
+ #include "constants/sa1/text.h"
++#include "sonadv_classic.h"
+ 
+ typedef struct {
+     StrcUi_805423C unk0;
+--- a/src/game/sa1/menus/title_screen.c
++++ b/src/game/sa1/menus/title_screen.c
+@@ -34,6 +34,7 @@
+ #include "constants/sa1/songs.h"
+ #include "constants/sa1/tilemaps.h"
+ #include "constants/zones.h"
++#include "sonadv_classic.h"
+ 
+ #define MENU_ITEMS_TOP_Y    93
+ #define MENU_ITEMS_SPACE    14
+--- a/src/game/sa1/special_stage/main.c
++++ b/src/game/sa1/special_stage/main.c
+@@ -21,6 +21,7 @@
+ #include "constants/sa1/tilemaps.h"
+ #include "constants/sa1/songs.h"
+ #include "constants/zones.h"
++#include "sonadv_classic.h"
+ 
+ typedef struct {
+     u8 unk0;
+--- a/src/game/sa1/ui/character_select.c
++++ b/src/game/sa1/ui/character_select.c
+@@ -17,6 +17,7 @@
+ 
+ #include "constants/sa1/characters.h"
+ #include "constants/sa1/songs.h"
++#include "sonadv_classic.h"
+ 
+ // Character Indices
+ #define CIDX_LEFT   0
+--- a/src/game/sa1/ui/collect_chaos_emeralds_msg.c
++++ b/src/game/sa1/ui/collect_chaos_emeralds_msg.c
+@@ -8,6 +8,7 @@
+ #include "data/sa1/ui_graphics.h"
+ 
+ #include "constants/sa1/animations.h"
++#include "sonadv_classic.h"
+ 
+ typedef struct {
+     Sprite sprites[3];
+--- a/src/game/sa1/ui/course_select.c
++++ b/src/game/sa1/ui/course_select.c
+@@ -16,6 +16,7 @@
+ #include "constants/sa1/animations.h"
+ #include "constants/sa1/songs.h"
+ #include "constants/sa1/ui_graphics.h"
++#include "sonadv_classic.h"
+ 
+ typedef struct {
+     StrcUi_805423C strc0;
+--- a/src/game/sa1/ui/edit_language_screen.c
++++ b/src/game/sa1/ui/edit_language_screen.c
+@@ -13,6 +13,7 @@
+ #include "constants/sa1/animations.h"
+ #include "constants/sa1/songs.h"
+ #include "constants/sa1/tilemaps.h"
++#include "sonadv_classic.h"
+ 
+ #define LANGSCRN_BG_SCREENBASE 30
+ 
+--- a/src/game/sa1/ui/game_2_0.c
++++ b/src/game/sa1/ui/game_2_0.c
+@@ -13,6 +13,7 @@
+ #include "data/sa1/ui_graphics.h"
+ 
+ #include "constants/sa1/animations.h"
++#include "sonadv_classic.h"
+ 
+ typedef struct {
+     union {
+--- a/src/game/sa1/ui/game_2_1.c
++++ b/src/game/sa1/ui/game_2_1.c
+@@ -14,6 +14,7 @@
+ #include "constants/sa1/vram_hardcoded.h"
+ #include "constants/sa1/songs.h"
+ #include "constants/zones.h"
++#include "sonadv_classic.h"
+ 
+ typedef struct {
+     u8 filler0[0xC];
+--- a/src/game/sa1/ui/game_2_3.c
++++ b/src/game/sa1/ui/game_2_3.c
+@@ -13,6 +13,7 @@
+ #include "constants/sa1/animations.h"
+ #include "constants/sa1/songs.h"
+ #include "constants/zones.h"
++#include "sonadv_classic.h"
+ 
+ typedef struct {
+     u8 filler0[0x48];
+--- a/src/game/sa1/ui/intro_animation.c
++++ b/src/game/sa1/ui/intro_animation.c
+@@ -13,6 +13,7 @@
+ 
+ #include "constants/sa1/animations.h"
+ #include "constants/sa1/songs.h"
++#include "sonadv_classic.h"
+ 
+ #define INTRO_SPOTLIGHT_COUNT 2
+ 
+--- a/src/game/sa1/ui/multiplayer_continue_screen.c
++++ b/src/game/sa1/ui/multiplayer_continue_screen.c
+@@ -13,6 +13,7 @@
+ #include "game/sa1/stage/stage_ui.h"
+ 
+ #include "constants/sa1/text.h"
++#include "sonadv_classic.h"
+ 
+ typedef struct {
+     Background bg;
+--- a/src/game/sa1/ui/player_name_input_menu.c
++++ b/src/game/sa1/ui/player_name_input_menu.c
+@@ -11,6 +11,7 @@
+ #include "game/sa1/stage/stage_ui.h"
+ 
+ #include "constants/sa1/songs.h"
++#include "sonadv_classic.h"
+ 
+ /* NOTE(Jace): This whole module needs to be considered to be redone. */
+ 
+--- a/src/game/sa1/ui/sound_test.c
++++ b/src/game/sa1/ui/sound_test.c
+@@ -10,6 +10,7 @@
+ 
+ #include "constants/sa1/animations.h"
+ #include "constants/sa1/songs.h"
++#include "sonadv_classic.h"
+ 
+ #ifndef BUG_FIX
+ #define DoSpriteTransformAndDisplay(s, tf)                                                                                                 \
+--- a/src/game/sa1/ui/special_stage_intro.c
++++ b/src/game/sa1/ui/special_stage_intro.c
+@@ -13,6 +13,7 @@
+ #include "constants/sa1/characters.h"
+ #include "constants/sa1/ui_graphics.h"
+ #include "constants/zones.h"
++#include "sonadv_classic.h"
+ 
+ #define FRAME_RELAY_A 90
+ #define FRAME_RELAY_B 150
+--- a/src/game/sa1/ui/staff_credits.c
++++ b/src/game/sa1/ui/staff_credits.c
+@@ -13,6 +13,7 @@
+ #include "constants/sa1/anim_sizes.h"
+ #include "constants/sa1/songs.h"
+ #include "constants/sa1/vram_hardcoded.h"
++#include "sonadv_classic.h"
+ 
+ extern const u8 gUnknown_0868483C[0x500];
+ 
+--- a/src/game/sa1/ui/time_attack_lobby.c
++++ b/src/game/sa1/ui/time_attack_lobby.c
+@@ -11,6 +11,7 @@
+ 
+ #include "constants/sa1/songs.h"
+ #include "constants/sa1/text.h"
++#include "sonadv_classic.h"
+ 
+ typedef struct {
+     /* 0x000 */ Sprite sprites[4];
+--- a/src/game/sa1/ui/time_attack_record.c
++++ b/src/game/sa1/ui/time_attack_record.c
+@@ -12,6 +12,7 @@
+ #include "constants/sa1/animations.h"
+ #include "constants/sa1/songs.h"
+ #include "constants/sa1/ui_graphics.h"
++#include "sonadv_classic.h"
+ 
+ typedef struct {
+     /* 0x00 */ Sprite s;
+--- a/src/game/sa1/ui/time_attack_records.c
++++ b/src/game/sa1/ui/time_attack_records.c
+@@ -17,6 +17,7 @@
+ #include "constants/sa1/songs.h"
+ #include "constants/sa1/text.h"
+ #include "constants/zones.h"
++#include "sonadv_classic.h"
+ 
+ /* These are the records appearing after selecting / before starting to play a stage */
+ 
+--- a/src/game/sa1/ui/time_attack_results.c
++++ b/src/game/sa1/ui/time_attack_results.c
+@@ -11,6 +11,7 @@
+ #include "data/sa1/ui_graphics.h"
+ 
+ #include "constants/sa1/animations.h"
++#include "sonadv_classic.h"
+ 
+ typedef struct {
+     /* 0x00 */ Sprite s;
+--- a/src/game/sa1/ui/vs_record.c
++++ b/src/game/sa1/ui/vs_record.c
+@@ -7,6 +7,7 @@
+ #include "game/sa1/stage/ui_rendering.h"
+ #include "game/sa1/save.h"
+ #include "game/sa1/stage/stage_ui.h"
++#include "sonadv_classic.h"
+ 
+ typedef struct {
+     s32 unk0;
+--- /dev/null
++++ b/include/sonadv_classic.h
+@@ -0,0 +1,16 @@
++// SonAdvance-nx: included last by the game's non-stage screen files (menus,
++// intro, character select, special stage, ...). Those screens were laid out
++// for the GBA's 240x160 picture, so their code uses the original size and
++// centre; the port shows that 240x160 area centred with side borders while no
++// stage is running. Data sized by DISPLAY_* in shared headers was already
++// expanded above this point, so only the code below sees the original size.
++#if WIDESCREEN_HACK
++#undef DISPLAY_WIDTH
++#undef DISPLAY_HEIGHT
++#undef DISPLAY_CENTER_X
++#undef DISPLAY_CENTER_Y
++#define DISPLAY_WIDTH    240
++#define DISPLAY_HEIGHT   160
++#define DISPLAY_CENTER_X (DISPLAY_WIDTH / 2)
++#define DISPLAY_CENTER_Y (DISPLAY_HEIGHT / 2)
++#endif

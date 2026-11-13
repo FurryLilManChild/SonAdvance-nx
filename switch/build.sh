@@ -27,6 +27,10 @@ mkdir -p "$BUILD" "$GEN"
 # No --delete: generated artifacts stay between builds; tracked sources are
 # refreshed to pristine upstream, then patched again below.
 rsync -a --checksum "$ROOT/upstream/sa2/" "$BUILD/" --exclude .git --exclude build
+# Files a patch creates from nothing are removed first, so it applies again.
+for p in "$ROOT"/switch/patches/*.patch; do
+    awk '/^--- \/dev\/null/{getline; sub(/^\+\+\+ b\//, ""); print}' "$p" | while read -r f; do rm -f "$BUILD/$f"; done
+done
 for p in "$ROOT"/switch/patches/*.patch; do
     (cd "$BUILD" && patch -p1 --forward --silent < "$p") || { echo "patch failed: $p"; exit 1; }
 done

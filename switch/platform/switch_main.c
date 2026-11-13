@@ -31,6 +31,7 @@
 #include "lib/agb_flash/flash_internal.h"
 #include "platform/shared/dma.h"
 #include "platform/shared/video/gpsp_renderer.h"
+#include "game/shared/stage/stage.h"
 
 #if ENABLE_AUDIO
 #include "platform/shared/audio/cgb_audio.h"
@@ -342,6 +343,9 @@ static DkShader sVsh, sFsh;
 static DkCmdBuf sCmd;
 static DkQueue sQueue;
 static DkImage sTexture;
+static DkImage sTextureClassic; /* 240x160: screens laid out for the GBA */
+#define CLASSIC_W 240
+#define CLASSIC_H 160
 static u32 *sStaging;          /* RGBA8 frame, CPU-visible */
 static DkGpuAddr sStagingGpu;
 static DkGpuAddr sDescGpu;     /* image descriptor then sampler descriptor */
@@ -410,10 +414,17 @@ static void GfxInit(void)
     u32 texSize = dkImageLayoutGetSize(&texLayout);
     u32 texAlign = dkImageLayoutGetAlignment(&texLayout);
     u32 texBlock = (texSize + texAlign + DK_MEMBLOCK_ALIGNMENT - 1) & ~(DK_MEMBLOCK_ALIGNMENT - 1);
+    lm.dimensions[0] = CLASSIC_W;
+    lm.dimensions[1] = CLASSIC_H;
+    DkImageLayout clsLayout;
+    dkImageLayoutInitialize(&clsLayout, &lm);
+    u32 clsOff = (texSize + dkImageLayoutGetAlignment(&clsLayout) - 1) & ~(dkImageLayoutGetAlignment(&clsLayout) - 1);
+    texBlock = (clsOff + dkImageLayoutGetSize(&clsLayout) + DK_MEMBLOCK_ALIGNMENT - 1) & ~(DK_MEMBLOCK_ALIGNMENT - 1);
     dkMemBlockMakerDefaults(&mm, sDevice, texBlock);
     mm.flags = DkMemBlockFlags_GpuCached | DkMemBlockFlags_Image;
     sTexMem = dkMemBlockCreate(&mm);
     dkImageInitialize(&sTexture, &texLayout, sTexMem, 0);
+    dkImageInitialize(&sTextureClassic, &clsLayout, sTexMem, clsOff);
 
     /* CPU-visible data: staging frame plus descriptors */
     u32 stagingSize = DISPLAY_WIDTH * DISPLAY_HEIGHT * 4;
@@ -429,7 +440,10 @@ static void GfxInit(void)
     DkImageView texView;
     dkImageViewDefaults(&texView, &sTexture);
     DkImageDescriptor *imgDesc = (DkImageDescriptor *)((u8 *)sStaging + descOff);
-    dkImageDescriptorInitialize(imgDesc, &texView, false, false);
+    dkImageDescriptorInitialize(&imgDesc[0], &texView, false, false);
+    DkImageView clsView;
+    dkImageViewDefaults(&clsView, &sTextureClassic);
+    dkImageDescriptorInitialize(&imgDesc[1], &clsView, false, false);
     DkSampler sampler;
     dkSamplerDefaults(&sampler); /* nearest filtering keeps pixels sharp */
     sampler.wrapMode[0] = DkWrapMode_ClampToEdge;
@@ -462,6 +476,7 @@ static void GfxInit(void)
 }
 
 static u64 sPresents;
+static bool sClassicView;
 
 static void GfxPresent(void)
 {
@@ -469,8 +484,22 @@ static void GfxPresent(void)
      * command memory (the work is a single quad; this costs almost nothing). */
     dkQueueWaitIdle(sQueue);
 
-    for (u32 i = 0; i < DISPLAY_WIDTH * DISPLAY_HEIGHT; i++)
-        sStaging[i] = sPalLut[sGameImage[i] & 0x7FFF];
+    /* Screens outside stages were laid out for the GBA's 240x160 (their
+     * code is built with the original size): show that area centred. */
+    bool classic = (gGameStageTask == NULL);
+    if (classic != sClassicView) {
+        sClassicView = classic;
+        LogF("view: %s\n", classic ? "classic 240x160 (menus, intro, special stage)" : "widescreen (stage)");
+    }
+
+    if (classic) {
+        for (u32 y = 0; y < CLASSIC_H; y++)
+            for (u32 x = 0; x < CLASSIC_W; x++)
+                sStaging[y * CLASSIC_W + x] = sPalLut[sGameImage[y * DISPLAY_WIDTH + x] & 0x7FFF];
+    } else {
+        for (u32 i = 0; i < DISPLAY_WIDTH * DISPLAY_HEIGHT; i++)
+            sStaging[i] = sPalLut[sGameImage[i] & 0x7FFF];
+    }
 
     int slot = dkQueueAcquireImage(sQueue, sSwapchain); /* blocks until a buffer is free (vsync paced) */
 
@@ -478,9 +507,9 @@ static void GfxPresent(void)
     dkCmdBufAddMemory(sCmd, sCmdMem, 0, CMDMEM);
 
     DkImageView texView;
-    dkImageViewDefaults(&texView, &sTexture);
+    dkImageViewDefaults(&texView, classic ? &sTextureClassic : &sTexture);
     DkCopyBuf src = { sStagingGpu, 0, 0 };
-    DkImageRect rect = { 0, 0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT, 1 };
+    DkImageRect rect = { 0, 0, 0, classic ? CLASSIC_W : DISPLAY_WIDTH, classic ? CLASSIC_H : DISPLAY_HEIGHT, 1 };
     dkCmdBufCopyBufferToImage(sCmd, &src, &texView, &rect, 0);
     dkCmdBufBarrier(sCmd, DkBarrier_Full, DkInvalidateFlags_Image | DkInvalidateFlags_Descriptors);
 
@@ -488,11 +517,14 @@ static void GfxPresent(void)
     dkImageViewDefaults(&fbView, &sFramebuffers[slot]);
     dkCmdBufBindRenderTarget(sCmd, &fbView, NULL);
 
-    DkViewport vp = { 0.0f, 0.0f, (float)FB_WIDTH, (float)FB_HEIGHT, 0.0f, 1.0f };
     DkScissor sc = { 0, 0, FB_WIDTH, FB_HEIGHT };
-    dkCmdBufSetViewports(sCmd, 0, &vp, 1);
     dkCmdBufSetScissors(sCmd, 0, &sc, 1);
     dkCmdBufClearColorFloat(sCmd, 0, DkColorMask_RGBA, 0.0f, 0.0f, 0.0f, 1.0f);
+    /* Classic: 240x160 at 4.5x = 1080x720, centred with black borders. */
+    float vx = classic ? (FB_WIDTH - CLASSIC_W * FB_HEIGHT / CLASSIC_H) / 2.0f : 0.0f;
+    float vw = classic ? (float)(CLASSIC_W * FB_HEIGHT / CLASSIC_H) : (float)FB_WIDTH;
+    DkViewport vp = { vx, 0.0f, vw, (float)FB_HEIGHT, 0.0f, 1.0f };
+    dkCmdBufSetViewports(sCmd, 0, &vp, 1);
 
     DkShader const *shaders[] = { &sVsh, &sFsh };
     dkCmdBufBindShaders(sCmd, DkStageFlag_GraphicsMask, shaders, 2);
@@ -508,9 +540,9 @@ static void GfxPresent(void)
     dkCmdBufBindColorWriteState(sCmd, &cws);
     dkCmdBufBindVtxAttribState(sCmd, NULL, 0);
 
-    dkCmdBufBindImageDescriptorSet(sCmd, sDescGpu, 1);
+    dkCmdBufBindImageDescriptorSet(sCmd, sDescGpu, 2);
     dkCmdBufBindSamplerDescriptorSet(sCmd, sDescGpu + 128, 1);
-    dkCmdBufBindTexture(sCmd, DkStage_Fragment, 0, dkMakeTextureHandle(0, 0));
+    dkCmdBufBindTexture(sCmd, DkStage_Fragment, 0, dkMakeTextureHandle(classic ? 1 : 0, 0));
     dkCmdBufDraw(sCmd, DkPrimitive_TriangleStrip, 4, 1, 0, 0);
 
     dkQueueSubmitCommands(sQueue, dkCmdBufFinishList(sCmd));
@@ -546,27 +578,30 @@ static void WriteLE(u8 *p, u32 v, int n)
 
 static void CaptureFrame(u64 frame)
 {
+    /* Saves what is on screen: the 240x160 area in classic view. */
+    const int w = sClassicView ? CLASSIC_W : DISPLAY_WIDTH;
+    const int h = sClassicView ? CLASSIC_H : DISPLAY_HEIGHT;
     char path[128];
     snprintf(path, sizeof(path), LOG_DIR "/capture_%03u_f%llu.bmp", ++sCaptures, (unsigned long long)frame);
     FILE *f = fopen(path, "wb");
     if (f == NULL)
         return;
-    u32 rowBytes = DISPLAY_WIDTH * 3;
+    u32 rowBytes = w * 3;
     u32 pad = (4 - (rowBytes & 3)) & 3;
-    u32 dataSize = (rowBytes + pad) * DISPLAY_HEIGHT;
+    u32 dataSize = (rowBytes + pad) * h;
     u8 hdr[54] = { 'B', 'M' };
     WriteLE(hdr + 2, 54 + dataSize, 4);
     WriteLE(hdr + 10, 54, 4);
     WriteLE(hdr + 14, 40, 4);
-    WriteLE(hdr + 18, DISPLAY_WIDTH, 4);
-    WriteLE(hdr + 22, DISPLAY_HEIGHT, 4);
+    WriteLE(hdr + 18, w, 4);
+    WriteLE(hdr + 22, h, 4);
     WriteLE(hdr + 26, 1, 2);
     WriteLE(hdr + 28, 24, 2);
     WriteLE(hdr + 34, dataSize, 4);
     fwrite(hdr, 1, 54, f);
     static u8 row[DISPLAY_WIDTH * 3 + 4];
-    for (int y = DISPLAY_HEIGHT - 1; y >= 0; y--) {
-        for (int x = 0; x < DISPLAY_WIDTH; x++) {
+    for (int y = h - 1; y >= 0; y--) {
+        for (int x = 0; x < w; x++) {
             u32 c = sPalLut[sGameImage[y * DISPLAY_WIDTH + x] & 0x7FFF];
             row[x * 3 + 0] = (c >> 16) & 0xFF;
             row[x * 3 + 1] = (c >> 8) & 0xFF;
@@ -617,8 +652,11 @@ static void Heartbeat(void)
 
 void DoSoftReset(void) {}
 
+extern void WideBg_Update(void);
+
 void VDraw(void)
 {
+    WideBg_Update();
     gpsp_draw_frame(sGameImage);
     REG_VCOUNT = DISPLAY_HEIGHT + 1;
 }

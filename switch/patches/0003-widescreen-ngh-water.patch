@@ -1,0 +1,19 @@
+--- a/src/game/sa1/stage/backgrounds/zone_1.inc.c
++++ b/src/game/sa1/stage/backgrounds/zone_1.inc.c
+@@ -62,4 +62,15 @@
+         *offsets++ = ((i - 86) * x) >> 8;
+         *offsets++ = 0;
+     }
++
++#if WIDESCREEN_HACK
++    // SonAdvance-nx: the background art ends at line 160 (the GBA screen
++    // height). Below it, draw from the nearest water rows (136 to 159),
++    // stretched over the extra lines, keeping the per-line parallax going.
++    for (; i < DISPLAY_HEIGHT; i++) {
++        s32 srcRow = 136 + ((i - 160) * 24) / (DISPLAY_HEIGHT - 160);
++        *offsets++ = ((i - 86) * x) >> 8;
++        *offsets++ = (u16)(srcRow - i);
++    }
++#endif
+ }
+\ No newline at end of file

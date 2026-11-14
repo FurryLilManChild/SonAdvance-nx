@@ -129,9 +129,23 @@ static void LogClocks(const char *why)
 /* Crash handler: writes faulting context as offsets from the module start  */
 /* ------------------------------------------------------------------------ */
 
-/* Exit through the system's normal close path (as mp2-nx does), which
- * avoids the "software was closed" error when quitting from the port menu. */
-u32 __nx_applet_exit_mode = 1;
+/* Exit through AM (ISelfController::Exit) the way mp2-nx does: the mode is
+ * set at exit time, and __libnx_exit below ends the process itself if the
+ * applet teardown did not take over the exit path. */
+u32 __nx_applet_exit_mode = 0;
+static LoaderReturnFn sLoaderReturn;
+
+extern void __appExit(void);
+extern void NX_NORETURN __nx_exit(Result rc, LoaderReturnFn retaddr);
+
+void NX_NORETURN __libnx_exit(int rc)
+{
+    (void)rc;
+    __appExit();
+    if (envGetExitFuncPtr() == sLoaderReturn)
+        svcExitProcess();
+    __nx_exit(0, envGetExitFuncPtr());
+}
 
 alignas(16) u8 __nx_exception_stack[0x4000];
 u64 __nx_exception_stack_size = sizeof(__nx_exception_stack);
@@ -164,6 +178,9 @@ void __libnx_exception_handler(ThreadExceptionDump *ctx)
     }
 
     FsFileSystem *fs = fsdevGetDeviceFileSystem("sdmc");
+    FsFileSystem ownFs;
+    if (fs == NULL && R_SUCCEEDED(fsOpenSdCardFileSystem(&ownFs)))
+        fs = &ownFs; /* sdmc already unmounted (crash during exit) */
     if (fs != NULL) {
         char path[FS_MAX_PATH];
         snprintf(path, sizeof(path), "/switch/SonAdvance-nx/logs/crash_%llx.txt", (unsigned long long)armGetSystemTick());
@@ -787,17 +804,30 @@ static void HandleVBlankInterrupts(void)
     REG_DISPSTAT &= ~INTR_FLAG_VBLANK;
 }
 
+static AppletHookCookie sAppletCookie;
+
+/* Each step is logged (and flushed) so a failure at exit shows where it was.
+ * The SD card stays mounted and stdio stays open: libnx and newlib close them
+ * after this, and the crash handler still needs the card. */
 static void Shutdown(void)
 {
     LogF("exit: frames %llu, saves written %u\n", (unsigned long long)sFrames, sSaveWrites);
     FlushSaveIfChanged(false);
-    if (sAudioDevice != 0)
+    appletUnhook(&sAppletCookie);
+    if (sAudioDevice != 0) {
+        SDL_PauseAudioDevice(sAudioDevice, 1);
         SDL_CloseAudioDevice(sAudioDevice);
+        sAudioDevice = 0;
+    }
+    LogF("exit: audio closed\n");
     SDL_Quit();
+    LogF("exit: SDL done\n");
     GfxExit();
-    if (sLog != NULL)
-        fclose(sLog);
-    fsdevUnmountAll();
+    LogF("exit: graphics done, ending through AM\n");
+    fflush(stdout);
+    fflush(stderr);
+    sLoaderReturn = envGetExitFuncPtr();
+    __nx_applet_exit_mode = 1;
     exit(0);
 }
 
@@ -856,8 +886,6 @@ void VBlankIntrWait(void)
 /* ------------------------------------------------------------------------ */
 /* Entry                                                                    */
 /* ------------------------------------------------------------------------ */
-
-static AppletHookCookie sAppletCookie;
 
 static void AppletHook(AppletHookType hook, void *param)
 {

@@ -331,6 +331,7 @@ static const struct {
     { "keep_rings", &gSonAdvCheats.keepRings },
     { "no_damage", &gSonAdvCheats.noDamage },
     { "all_zones", &gSonAdvCheats.allZones },
+    { "super_sonic", &gSonAdvCheats.superSonic },
 };
 #define NUM_CHEATS ((int)(sizeof(sCheatKeys) / sizeof(sCheatKeys[0])))
 
@@ -359,10 +360,10 @@ static void LoadSettings(void)
                 *sCheatKeys[i].value = (u8)(atoi(val) != 0);
     }
     fclose(f);
-    LogF("settings: buttons A=%s B=%s L=%s R=%s Start=%s Select=%s; cheats lives %u rings %u damage %u zones %u\n",
+    LogF("settings: buttons A=%s B=%s L=%s R=%s Start=%s Select=%s; cheats lives %u rings %u damage %u stages %u super %u\n",
          SwitchButtonName(sMap[0]), SwitchButtonName(sMap[1]), SwitchButtonName(sMap[2]), SwitchButtonName(sMap[3]),
          SwitchButtonName(sMap[4]), SwitchButtonName(sMap[5]), gSonAdvCheats.infiniteLives, gSonAdvCheats.keepRings,
-         gSonAdvCheats.noDamage, gSonAdvCheats.allZones);
+         gSonAdvCheats.noDamage, gSonAdvCheats.allZones, gSonAdvCheats.superSonic);
 }
 
 static void SaveSettings(void)
@@ -757,11 +758,11 @@ static bool sSettingsDirty;
 enum { PAGE_MAIN, PAGE_CHEATS, PAGE_CONTROLS };
 enum {
     ROW_RESUME, ROW_RESTART, ROW_CONTROLS, ROW_CHEATS, ROW_EXIT,              /* main */
-    ROW_CHEAT0, ROW_CHEAT_LAST = ROW_CHEAT0 + 3,                             /* cheats */
+    ROW_CHEAT0, ROW_CHEAT_LAST = ROW_CHEAT0 + 4,                             /* cheats */
     ROW_MAP0, ROW_MAP_LAST = ROW_MAP0 + MAP_COUNT - 1, ROW_MAP_RESET,        /* controls */
     ROW_BACK,
 };
-static const char *const sCheatNames[NUM_CHEATS] = { "Infinite lives", "Keep rings", "No damage", "All zones" };
+static const char *const sCheatNames[NUM_CHEATS] = { "Infinite lives", "Keep rings", "No damage", "All stages", "Super Sonic" };
 
 static int sMenuPage;
 static int sMenuCursor;

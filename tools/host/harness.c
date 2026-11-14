@@ -13,7 +13,7 @@
  *   RESULTS_AT=frame  show the end-of-act results (use with LEVEL).
  *   SPECIAL_AT=frame  enter the special stage (use with LEVEL).
  *   RESTART_AT=frame  restart the act (the port menu action).
- *   CHEATS=list   any of lives,rings,damage,zones (comma separated).
+ *   CHEATS=list   any of lives,rings,damage,zones,super (comma separated).
  *   HIT_AT=frame  hit the player once (Coll_DamagePlayer). KILL_AT=frame: lose a life.
  *   CHARSEL_AT=frame  open the character select (single player).
  *   COURSE_AT=frame  open the course select (single player, character CHAR).
@@ -78,6 +78,25 @@ static u16 ParseKeys(const char *s)
     return k;
 }
 
+static void DumpAnimPalettes(void)
+{
+    static const int anims[] = { 0, 398, 399, 400 };
+    for (unsigned i = 0; i < sizeof(anims) / sizeof(anims[0]); i++) {
+        const s32 *c = (const s32 *)gRefSpriteTables->animations[anims[i]][0];
+        for (int w = 0; w < 64; w++) {
+            if (c[w] == -2) {
+                s32 pal = c[w + 1];
+                u16 n = ((const u16 *)&c[w + 2])[0], off = ((const u16 *)&c[w + 2])[1];
+                fprintf(stderr, "anim %d: palette %d colors %u at %u:", anims[i], pal, n, off);
+                for (int k = 0; k < n && k < 16; k++)
+                    fprintf(stderr, " %04x", gRefSpriteTables->palettes[pal * 16 + k]);
+                fprintf(stderr, "\n");
+                break;
+            }
+        }
+    }
+}
+
 static void Init(void)
 {
     sInit = 1;
@@ -127,6 +146,8 @@ static void Init(void)
         sCourseAt = atoi(getenv("COURSE_AT"));
         sChar = getenv("CHAR") ? atoi(getenv("CHAR")) : 0;
     }
+    if (getenv("DUMPPAL"))
+        DumpAnimPalettes();
     if (getenv("STATUS"))
         sStatus = 1;
     if (getenv("CHEATS")) {
@@ -135,6 +156,7 @@ static void Init(void)
         gSonAdvCheats.keepRings = strstr(c, "rings") != NULL;
         gSonAdvCheats.noDamage = strstr(c, "damage") != NULL;
         gSonAdvCheats.allZones = strstr(c, "zones") != NULL;
+        gSonAdvCheats.superSonic = strstr(c, "super") != NULL;
     }
     if (getenv("SPECIAL_AT"))
         sSpecialAt = atoi(getenv("SPECIAL_AT"));

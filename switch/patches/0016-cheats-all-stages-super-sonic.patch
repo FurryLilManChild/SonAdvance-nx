@@ -1,0 +1,171 @@
+--- a/src/game/sa1/ui/course_select.c
++++ b/src/game/sa1/ui/course_select.c
+@@ -1,6 +1,6 @@
+ #include "global.h"
+ #include "sonadv_port.h"
+-#define SONADV_ALL_ZONES_COUNT 14
++#define SONADV_ALL_ZONES_COUNT 15
+ #include "core.h"
+ #include "sprite.h"
+ 
+@@ -187,10 +187,6 @@
+             unlockedLevelCount = gUnknown_03005140 + 2;
+         } else {
+             unlockedLevelCount = LOADED_SAVE->unlockedLevels[gSelectedCharacter] + 2;
+-            // SonAdvance-nx cheat: every zone, as if all were cleared (save unchanged).
+-            if (gSonAdvCheats.allZones && (unlockedLevelCount < SONADV_ALL_ZONES_COUNT)) {
+-                unlockedLevelCount = SONADV_ALL_ZONES_COUNT;
+-            }
+         }
+ 
+         if (gSelectedCharacter == CHARACTER_SONIC) {
+@@ -210,6 +206,11 @@
+                 unlockedLevelCount = 14;
+             }
+         }
++        // SonAdvance-nx cheat: every stage through X Zone and The Moon, for every
++        // character, as if all were cleared (the save is not changed).
++        if (gSonAdvCheats.allZones && !IS_MULTI_PLAYER) {
++            unlockedLevelCount = SONADV_ALL_ZONES_COUNT;
++        }
+         if ((gGameMode != 0) && (unlockedLevelCount > 0xDU)) {
+             unlockedLevelCount = 13;
+         }
+--- a/src/game/shared/stage/stage.c
++++ b/src/game/shared/stage/stage.c
+@@ -491,6 +491,9 @@
+ {
+     u16 sioId = SIO_MULTI_CNT->id;
+     u32 timeStep;
++#if (GAME == GAME_SA1)
++    SonAdv_StageFrame(); // SonAdvance-nx: Super Sonic cheat
++#endif
+ #ifndef COLLECT_RINGS_ROM
+     if (IS_SINGLE_PLAYER) {
+ #if DEBUG
+--- a/src/game/shared/stage/music_manager.c
++++ b/src/game/shared/stage/music_manager.c
+@@ -1,4 +1,5 @@
+ #include "global.h"
++#include "sonadv_port.h"
+ #include "core.h"
+ 
+ #include "game/globals.h"
+@@ -130,7 +131,8 @@
+             SET_UNK5(1);
+             m4aSongNumStop(MUS_INVINCIBILITY);
+         } else if ((songHeader != gSongTable[MUS_1_UP].header) && (songHeader != gSongTable[MUS_INVINCIBILITY].header)
+-                   && (gPlayer.itemEffect & PLAYER_ITEM_EFFECT__INVINCIBILITY) && (gMusicManagerState.unk2 == 0)) {
++                   && (gPlayer.itemEffect & PLAYER_ITEM_EFFECT__INVINCIBILITY) && (gMusicManagerState.unk2 == 0)
++                   && !SonAdv_SuperActive()) { // SonAdvance-nx: no invincibility music for the Super Sonic cheat
+             gMusicManagerState.unk2 = 0;
+             SET_UNK5(1);
+             m4aSongNumStart(MUS_INVINCIBILITY);
+--- a/src/platform/shared/sonadv_port.c
++++ b/src/platform/shared/sonadv_port.c
+@@ -2,10 +2,13 @@
+ // host harness. See include/sonadv_port.h.
+ #include "global.h"
+ #include "core.h"
++#include "sprite.h"
+ #include "task.h"
+ #include "lib/m4a/m4a.h"
+ #include "game/globals.h"
+ #include "game/shared/stage/stage.h"
++#include "game/shared/stage/player.h"
++#include "constants/sa1/characters.h"
+ #include "sonadv_port.h"
+ 
+ SonAdvCheats gSonAdvCheats;
+@@ -25,6 +28,60 @@
+ // teardown is the one the game uses when a life is lost (HandleLifeLost);
+ // GameStageStart then starts the act from its beginning, as the next-act path
+ // (GoToNextLevel) does.
++// Super Sonic in normal acts. SA1's own Super Sonic exists only for the
++// final stage (The Moon), where he flies; it has no running, jumping or
++// rolling sprites. So this is the Genesis-style idea built from what the
++// game has: Sonic's own sprites with Super Sonic's palette (sprite palette
++// 11, same color layout as Sonic's palette 0), the invincibility item's
++// effect without its music or stars, and the speed shoes' effect without
++// the faster music. Both timers are refreshed every frame so they never run
++// out; turning the cheat off lets them run out normally a frame later.
++#define SUPER_SONIC_PALETTE 11
++#define SONIC_PALETTE       0
++#define SUPER_TIMER         2
++
++static bool8 sSuperApplied;
++
++bool32 SonAdv_SuperActive(void)
++{
++    return gSonAdvCheats.superSonic && IS_SINGLE_PLAYER && (gGameStageTask != NULL) && !IS_EXTRA_STAGE(gCurrentLevel)
++        && (gPlayer.character == CHARACTER_SONIC);
++}
++
++static void SetSonicPalette(s32 palette)
++{
++    for (int i = 0; i < 16; i++) {
++        GET_PALETTE_COLOR_OBJ(0, i) = gRefSpriteTables->palettes[palette * 16 + i];
++    }
++    gFlags |= FLAGS_UPDATE_SPRITE_PALETTES;
++}
++
++void SonAdv_StageFrame(void)
++{
++    Sprite *body = (gPlayer.spriteInfoBody != NULL) ? &gPlayer.spriteInfoBody->s : NULL;
++
++    if (SonAdv_SuperActive()) {
++        gPlayer.itemEffect |= (PLAYER_ITEM_EFFECT__INVINCIBILITY | PLAYER_ITEM_EFFECT__SPEED_UP);
++        gPlayer.timerInvincibility = SUPER_TIMER;
++        gPlayer.timerSpeedup = SUPER_TIMER;
++        if (body != NULL) {
++            // Keep the animations from loading Sonic's blue palette back in.
++            body->frameFlags |= SPRITE_FLAG_MASK_18;
++        }
++        SetSonicPalette(SUPER_SONIC_PALETTE);
++        sSuperApplied = TRUE;
++    } else if (sSuperApplied) {
++        sSuperApplied = FALSE;
++        if (body != NULL) {
++            body->frameFlags &= ~SPRITE_FLAG_MASK_18;
++        }
++        if (gPlayer.character == CHARACTER_SONIC) {
++            SetSonicPalette(SONIC_PALETTE);
++        }
++        // The timers (2) run out on their own next frame.
++    }
++}
++
+ void SonAdv_RestartAct(void)
+ {
+     if (!SonAdv_CanRestartAct())
+@@ -41,6 +98,8 @@
+     GameStageStart();
+ }
+ #else
++bool32 SonAdv_SuperActive(void) { return FALSE; }
++void SonAdv_StageFrame(void) { }
+ bool32 SonAdv_CanRestartAct(void) { return FALSE; }
+ void SonAdv_RestartAct(void) { }
+ #endif
+--- a/include/sonadv_port.h
++++ b/include/sonadv_port.h
+@@ -12,6 +12,7 @@
+     u8 keepRings;     // getting hit knocks the player back but drops no rings
+     u8 noDamage;      // enemies and hazards that hit (not pits, lava, crushing, drowning) do nothing
+     u8 allZones;      // course select offers every zone, without changing the save
++    u8 superSonic;    // Sonic plays every act as Super Sonic (gold, invincible, fast)
+ } SonAdvCheats;
+ 
+ extern SonAdvCheats gSonAdvCheats;
+@@ -24,6 +25,11 @@
+     }
+ }
+ 
++// Super Sonic cheat: called once per stage frame (Task_GameStage).
++void SonAdv_StageFrame(void);
++// True while the Super Sonic cheat is acting on the player.
++bool32 SonAdv_SuperActive(void);
++
+ // True while a single-player act is running (the port menu offers Restart act).
+ bool32 SonAdv_CanRestartAct(void);
+ // Back to the start of the current act: no checkpoint, 0 rings, timer reset, no life lost.

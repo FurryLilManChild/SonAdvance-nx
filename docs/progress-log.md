@@ -2,6 +2,12 @@
 
 Newest first.
 
+## 2026-11-13: switch-test6 built (replaces switch-test5, not yet tested)
+
+- Mark: "All stages" must include the last level, and he wants Super Sonic in every act tried (I had dropped both on my own judgement; his call). Correction to the switch-test5 note: the course select's "FINAL ZONE" is X Zone (level 12) and was already listed; what was left out was the Extra Zone (The Moon, level 13).
+- All stages (0016): course select count 15 for every character after the game's caps, so the list runs through Final Zone (X Zone) and Extra Zone (The Moon). The Moon is the game's Super Sonic flying stage; it forces Super Sonic whoever is picked (harness: all four characters load it).
+- Super Sonic cheat (0016): SA1's own Super Sonic only flies (transform, move and dash sprites, final stage only). For normal acts: Sonic's sprites with Super Sonic's palette (sprite palette 11, same layout as Sonic's palette 0; the animation's palette load blocked with sprite flag 18), invincibility effect (enemies destroyed on touch, no hits, lava) without its music, speed shoes effect without the faster music, refreshed every stage frame. Sonic only; off in The Moon. Harness: gold Sonic, enemies destroyed on touch (score 200), a hit refused, much further along the act in the same time.
+
 ## 2026-11-13: switch-test4 and switch-test5 built
 
 - switch-test3 report (Mark): everything good except "the software was closed because an error occurred" when exiting from the port menu. The log ends right after "exit:"; no crash report. Likely cause: our shutdown unmounted the SD card and closed the log, then newlib closed stderr (a file on the unmounted card), and the crash handler had no card to write to. switch-test4: exit through AM the way mp2-nx does (mode set at exit time, __libnx_exit ends the process if the applet teardown did not take over), card stays mounted, each exit step logged, crash handler opens the card itself. Mark: test it, but no more build rounds just for this.

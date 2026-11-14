@@ -1,0 +1,182 @@
+--- /dev/null
++++ b/include/sonadv_port.h
+@@ -0,0 +1,32 @@
++// SonAdvance-nx: port options the game code reads (cheats) and port actions
++// (restart act). Set by the Switch port menu; the host harness sets them from
++// environment variables.
++#ifndef GUARD_SONADV_PORT_H
++#define GUARD_SONADV_PORT_H
++
++#include "global.h"
++#include "game/globals.h"
++
++typedef struct {
++    u8 infiniteLives; // a lost life is given back (single player)
++    u8 keepRings;     // getting hit knocks the player back but drops no rings
++    u8 noDamage;      // enemies and hazards that hit (not pits, lava, crushing, drowning) do nothing
++    u8 allZones;      // course select offers every zone, without changing the save
++} SonAdvCheats;
++
++extern SonAdvCheats gSonAdvCheats;
++
++// Infinite lives cheat: called just before the game takes a life away.
++static inline void SonAdv_GiveLifeBack(void)
++{
++    if (gSonAdvCheats.infiniteLives && IS_SINGLE_PLAYER && (gNumLives < 255)) {
++        gNumLives++;
++    }
++}
++
++// True while a single-player act is running (the port menu offers Restart act).
++bool32 SonAdv_CanRestartAct(void);
++// Back to the start of the current act: no checkpoint, 0 rings, timer reset, no life lost.
++void SonAdv_RestartAct(void);
++
++#endif
+--- /dev/null
++++ b/src/platform/shared/sonadv_port.c
+@@ -0,0 +1,46 @@
++// SonAdvance-nx: port options and actions shared by the Switch build and the
++// host harness. See include/sonadv_port.h.
++#include "global.h"
++#include "core.h"
++#include "task.h"
++#include "lib/m4a/m4a.h"
++#include "game/globals.h"
++#include "game/shared/stage/stage.h"
++#include "sonadv_port.h"
++
++SonAdvCheats gSonAdvCheats;
++
++#if (GAME == GAME_SA1)
++void GameStageStart(void); // stage.c (declared in stage.h for SA2 only)
++#endif
++
++#if (GAME == GAME_SA1)
++bool32 SonAdv_CanRestartAct(void)
++{
++    return (gGameStageTask != NULL) && IS_SINGLE_PLAYER && !(gStageFlags & STAGE_FLAG__DEMO_RUNNING);
++}
++
++// Called between frames (from the platform's VBlankIntrWait, after the frame's
++// tasks ran), the same point a task-driven stage change takes effect. The
++// teardown is the one the game uses when a life is lost (HandleLifeLost);
++// GameStageStart then starts the act from its beginning, as the next-act path
++// (GoToNextLevel) does.
++void SonAdv_RestartAct(void)
++{
++    if (!SonAdv_CanRestartAct())
++        return;
++
++    gFlags &= ~(FLAGS_PAUSE_GAME | FLAGS_EXECUTE_HBLANK_COPY);
++    m4aMPlayAllStop();
++
++    TasksDestroyAll();
++    PAUSE_BACKGROUNDS_QUEUE();
++    gBgSpritesCount = 0;
++    PAUSE_GRAPHICS_QUEUE();
++
++    GameStageStart();
++}
++#else
++bool32 SonAdv_CanRestartAct(void) { return FALSE; }
++void SonAdv_RestartAct(void) { }
++#endif
+--- a/src/game/shared/stage/stage.c
++++ b/src/game/shared/stage/stage.c
+@@ -15,6 +15,7 @@
+ #include "game/shared/stage/stage.h"
+ #include "game/shared/stage/player.h"
+ #include "game/shared/stage/camera.h"
++#include "sonadv_port.h"
+ 
+ #include "game/shared/stage/mp_finish.h"
+ #include "game/shared/stage/mp_indicators.h"
+@@ -716,6 +717,7 @@
+         return;
+     } else {
+ #if (GAME == GAME_SA1)
++        SonAdv_GiveLifeBack(); // SonAdvance-nx: infinite lives cheat
+         if (IS_SINGLE_PLAYER && (--gNumLives == 0))
+ #elif (GAME == GAME_SA2)
+         if (--gNumLives == 0)
+@@ -759,7 +761,7 @@
+ 
+         PAUSE_GRAPHICS_QUEUE();
+         CreateTimeAttackLobbyScreen();
+-    } else if (--gNumLives == 0) {
++    } else if ((SonAdv_GiveLifeBack(), --gNumLives == 0)) { // SonAdvance-nx: infinite lives cheat
+         if (SA2_LABEL(gUnknown_0300543C) > 0) {
+             SA2_LABEL(gUnknown_0300543C)--;
+             CreateGameOverScreen(OVER_CAUSE_ZERO_LIVES);
+--- a/src/game/shared/stage/collision_3.c
++++ b/src/game/shared/stage/collision_3.c
+@@ -1,4 +1,5 @@
+ #include "global.h"
++#include "sonadv_port.h"
+ #include "rect.h"
+ #include "sprite.h"
+ #include "lib/m4a/m4a.h"
+@@ -934,6 +935,13 @@
+         return FALSE;
+     }
+ 
++#if (GAME == GAME_SA1)
++    // SonAdvance-nx cheat: no damage for the player (not the CPU partner).
++    if (gSonAdvCheats.noDamage && IS_SINGLE_PLAYER && p == &gPlayer) {
++        return FALSE;
++    }
++#endif
++
+     p->timerInvulnerability = PLAYER_INVULNERABLE_DURATION;
+ 
+ #if (GAME == GAME_SA1)
+@@ -1007,6 +1015,11 @@
+ #endif
+     {
+         if (!HAS_SHIELD(p)) {
++#if (GAME == GAME_SA1)
++            if (gSonAdvCheats.keepRings && IS_SINGLE_PLAYER && gRingCount > 0) {
++                // SonAdvance-nx cheat: knocked back, rings kept.
++            } else
++#endif
+             if (gRingCount > 0) {
+                 u32 rings = gRingCount;
+                 if (gGameMode == GAME_MODE_MULTI_PLAYER_COLLECT_RINGS) {
+--- a/src/game/sa1/ui/course_select.c
++++ b/src/game/sa1/ui/course_select.c
+@@ -1,4 +1,6 @@
+ #include "global.h"
++#include "sonadv_port.h"
++#define SONADV_ALL_ZONES_COUNT 14
+ #include "core.h"
+ #include "sprite.h"
+ 
+@@ -185,6 +187,10 @@
+             unlockedLevelCount = gUnknown_03005140 + 2;
+         } else {
+             unlockedLevelCount = LOADED_SAVE->unlockedLevels[gSelectedCharacter] + 2;
++            // SonAdvance-nx cheat: every zone, as if all were cleared (save unchanged).
++            if (gSonAdvCheats.allZones && (unlockedLevelCount < SONADV_ALL_ZONES_COUNT)) {
++                unlockedLevelCount = SONADV_ALL_ZONES_COUNT;
++            }
+         }
+ 
+         if (gSelectedCharacter == CHARACTER_SONIC) {
+--- a/src/game/sa1/ui/character_select.c
++++ b/src/game/sa1/ui/character_select.c
+@@ -1,4 +1,5 @@
+ #include "global.h"
++#include "sonadv_port.h"
+ #include "core.h"
+ #include "trig.h"
+ #include "background.h"
+@@ -875,7 +876,7 @@
+                     m4aSongNumStart(SE_RING_COPY);
+                     gTailsEnabled = 1;
+                 }
+-                if ((gGameMode == GAME_MODE_SINGLE_PLAYER) && (LOADED_SAVE->unlockedLevels[gSelectedCharacter] == 0)) {
++                if ((gGameMode == GAME_MODE_SINGLE_PLAYER) && (LOADED_SAVE->unlockedLevels[gSelectedCharacter] == 0) && !gSonAdvCheats.allZones) {
+                     gCurrentLevel = 0;
+                     gMultiplayerCurrentLevel = 0;
+                     ApplyGameStageSettingsAndStart();

@@ -32,6 +32,7 @@
 #include "platform/shared/dma.h"
 #include "platform/shared/video/gpsp_renderer.h"
 #include "game/shared/stage/stage.h"
+#include "sonadv_port.h"
 
 #if ENABLE_AUDIO
 #include "platform/shared/audio/cgb_audio.h"
@@ -51,6 +52,8 @@
 #define LOG_DIR   APP_DIR "/logs"
 #define SAVE_PATH APP_DIR "/sa1.sav"
 #define SAVE_TMP  APP_DIR "/sa1.sav.tmp"
+#define SETTINGS_PATH APP_DIR "/settings.ini"
+#define SETTINGS_TMP  APP_DIR "/settings.ini.tmp"
 
 #define SAVE_FILE_SIZE (64 * 1024)
 
@@ -255,7 +258,44 @@ static PadState sPad;
 static u64 sButtonsHeld, sButtonsDown;
 static bool sHoldStartSelect; /* after the port menu: keep + and - from the game until released */
 
-/* Default: Nintendo Switch Online GBA layout (A is A, B is B). */
+/* Remappable GBA buttons. Default: Nintendo Switch Online GBA layout (A is A,
+ * B is B, Plus is Start, Minus is Select). The D-pad and left stick are fixed. */
+enum { MAP_A, MAP_B, MAP_L, MAP_R, MAP_START, MAP_SELECT, MAP_COUNT };
+static const char *const sMapNames[MAP_COUNT] = { "A", "B", "L", "R", "Start", "Select" };
+static const char *const sMapKeys[MAP_COUNT] = { "map_a", "map_b", "map_l", "map_r", "map_start", "map_select" };
+static const u16 sMapGba[MAP_COUNT] = { A_BUTTON, B_BUTTON, L_BUTTON, R_BUTTON, START_BUTTON, SELECT_BUTTON };
+static const u64 sMapDefault[MAP_COUNT] = { HidNpadButton_A, HidNpadButton_B, HidNpadButton_L, HidNpadButton_R,
+                                            HidNpadButton_Plus, HidNpadButton_Minus };
+static u64 sMap[MAP_COUNT] = { HidNpadButton_A, HidNpadButton_B, HidNpadButton_L, HidNpadButton_R,
+                               HidNpadButton_Plus, HidNpadButton_Minus };
+
+/* Switch buttons a GBA button can be assigned to, with their names. */
+static const struct {
+    u64 bit;
+    const char *name;
+} sSwitchButtons[] = {
+    { HidNpadButton_A, "A" },   { HidNpadButton_B, "B" },   { HidNpadButton_X, "X" },       { HidNpadButton_Y, "Y" },
+    { HidNpadButton_L, "L" },   { HidNpadButton_R, "R" },   { HidNpadButton_ZL, "ZL" },     { HidNpadButton_ZR, "ZR" },
+    { HidNpadButton_Plus, "+" }, { HidNpadButton_Minus, "-" },
+};
+#define NUM_SWITCH_BUTTONS ((int)(sizeof(sSwitchButtons) / sizeof(sSwitchButtons[0])))
+
+static const char *SwitchButtonName(u64 bit)
+{
+    for (int i = 0; i < NUM_SWITCH_BUTTONS; i++)
+        if (sSwitchButtons[i].bit == bit)
+            return sSwitchButtons[i].name;
+    return "?";
+}
+
+static u64 SwitchButtonByName(const char *name)
+{
+    for (int i = 0; i < NUM_SWITCH_BUTTONS; i++)
+        if (strcmp(sSwitchButtons[i].name, name) == 0)
+            return sSwitchButtons[i].bit;
+    return 0;
+}
+
 static u16 ReadController(void)
 {
     u64 b = sButtonsHeld;
@@ -265,18 +305,9 @@ static u16 ReadController(void)
             sHoldStartSelect = false;
         b &= ~(u64)(HidNpadButton_Plus | HidNpadButton_Minus);
     }
-    if (b & HidNpadButton_A)
-        keys |= A_BUTTON;
-    if (b & HidNpadButton_B)
-        keys |= B_BUTTON;
-    if (b & HidNpadButton_Plus)
-        keys |= START_BUTTON;
-    if (b & HidNpadButton_Minus)
-        keys |= SELECT_BUTTON;
-    if (b & HidNpadButton_L)
-        keys |= L_BUTTON;
-    if (b & HidNpadButton_R)
-        keys |= R_BUTTON;
+    for (int i = 0; i < MAP_COUNT; i++)
+        if (b & sMap[i])
+            keys |= sMapGba[i];
     if (b & (HidNpadButton_Up | HidNpadButton_StickLUp))
         keys |= DPAD_UP;
     if (b & (HidNpadButton_Down | HidNpadButton_StickLDown))
@@ -286,6 +317,71 @@ static u16 ReadController(void)
     if (b & (HidNpadButton_Right | HidNpadButton_StickLRight))
         keys |= DPAD_RIGHT;
     return keys;
+}
+
+/* ------------------------------------------------------------------------ */
+/* Settings file: button map and cheats (settings.ini next to the save)     */
+/* ------------------------------------------------------------------------ */
+
+static const struct {
+    const char *key;
+    u8 *value;
+} sCheatKeys[] = {
+    { "infinite_lives", &gSonAdvCheats.infiniteLives },
+    { "keep_rings", &gSonAdvCheats.keepRings },
+    { "no_damage", &gSonAdvCheats.noDamage },
+    { "all_zones", &gSonAdvCheats.allZones },
+};
+#define NUM_CHEATS ((int)(sizeof(sCheatKeys) / sizeof(sCheatKeys[0])))
+
+static void LoadSettings(void)
+{
+    FILE *f = fopen(SETTINGS_PATH, "r");
+    if (f == NULL) {
+        LogF("settings: none yet, defaults\n");
+        return;
+    }
+    char line[128];
+    while (fgets(line, sizeof(line), f) != NULL) {
+        char *eq = strchr(line, '=');
+        if (eq == NULL)
+            continue;
+        *eq = 0;
+        char *val = eq + 1;
+        val[strcspn(val, "\r\n")] = 0;
+        for (int i = 0; i < MAP_COUNT; i++) {
+            u64 bit = SwitchButtonByName(val);
+            if (strcmp(line, sMapKeys[i]) == 0 && bit != 0)
+                sMap[i] = bit;
+        }
+        for (int i = 0; i < NUM_CHEATS; i++)
+            if (strcmp(line, sCheatKeys[i].key) == 0)
+                *sCheatKeys[i].value = (u8)(atoi(val) != 0);
+    }
+    fclose(f);
+    LogF("settings: buttons A=%s B=%s L=%s R=%s Start=%s Select=%s; cheats lives %u rings %u damage %u zones %u\n",
+         SwitchButtonName(sMap[0]), SwitchButtonName(sMap[1]), SwitchButtonName(sMap[2]), SwitchButtonName(sMap[3]),
+         SwitchButtonName(sMap[4]), SwitchButtonName(sMap[5]), gSonAdvCheats.infiniteLives, gSonAdvCheats.keepRings,
+         gSonAdvCheats.noDamage, gSonAdvCheats.allZones);
+}
+
+static void SaveSettings(void)
+{
+    FILE *f = fopen(SETTINGS_TMP, "w");
+    if (f == NULL) {
+        LogF("settings: cannot open %s (errno %d)\n", SETTINGS_TMP, errno);
+        return;
+    }
+    for (int i = 0; i < MAP_COUNT; i++)
+        fprintf(f, "%s=%s\n", sMapKeys[i], SwitchButtonName(sMap[i]));
+    for (int i = 0; i < NUM_CHEATS; i++)
+        fprintf(f, "%s=%u\n", sCheatKeys[i].key, *sCheatKeys[i].value);
+    fclose(f);
+    remove(SETTINGS_PATH);
+    if (rename(SETTINGS_TMP, SETTINGS_PATH) != 0)
+        LogF("settings: rename failed (errno %d)\n", errno);
+    else
+        LogF("settings: saved\n");
 }
 
 u16 Platform_GetKeyInput(void) { return ReadController(); }
@@ -652,10 +748,75 @@ static bool sMenuOpen;
  * again every frame would re-run the game's per-line DMA transfers, walking
  * their source pointers off the end (garbled picture, then a crash). */
 static uint16_t sMenuBackdrop[DISPLAY_WIDTH * DISPLAY_HEIGHT];
-static int sMenuCursor;
 static bool sExitRequested;
-static const char *const sMenuItems[] = { "Resume", "Exit game" };
-#define MENU_ITEMS ((int)(sizeof(sMenuItems) / sizeof(sMenuItems[0])))
+static bool sRestartRequested;
+static bool sSettingsDirty;
+
+/* Pages: main, cheats, controls. Rows are built each frame (Restart act only
+ * shows during a single-player act). */
+enum { PAGE_MAIN, PAGE_CHEATS, PAGE_CONTROLS };
+enum {
+    ROW_RESUME, ROW_RESTART, ROW_CONTROLS, ROW_CHEATS, ROW_EXIT,              /* main */
+    ROW_CHEAT0, ROW_CHEAT_LAST = ROW_CHEAT0 + 3,                             /* cheats */
+    ROW_MAP0, ROW_MAP_LAST = ROW_MAP0 + MAP_COUNT - 1, ROW_MAP_RESET,        /* controls */
+    ROW_BACK,
+};
+static const char *const sCheatNames[NUM_CHEATS] = { "Infinite lives", "Keep rings", "No damage", "All zones" };
+
+static int sMenuPage;
+static int sMenuCursor;
+static int sMenuRows[16];
+static int sMenuRowCount;
+static int sCaptureMap = -1;   /* controls: GBA button waiting for a Switch button */
+static u64 sCaptureDeadline;   /* system tick when the wait gives up */
+
+static void MenuBuildRows(void)
+{
+    sMenuRowCount = 0;
+    if (sMenuPage == PAGE_MAIN) {
+        sMenuRows[sMenuRowCount++] = ROW_RESUME;
+        if (SonAdv_CanRestartAct())
+            sMenuRows[sMenuRowCount++] = ROW_RESTART;
+        sMenuRows[sMenuRowCount++] = ROW_CONTROLS;
+        sMenuRows[sMenuRowCount++] = ROW_CHEATS;
+        sMenuRows[sMenuRowCount++] = ROW_EXIT;
+    } else if (sMenuPage == PAGE_CHEATS) {
+        for (int i = 0; i < NUM_CHEATS; i++)
+            sMenuRows[sMenuRowCount++] = ROW_CHEAT0 + i;
+        sMenuRows[sMenuRowCount++] = ROW_BACK;
+    } else {
+        for (int i = 0; i < MAP_COUNT; i++)
+            sMenuRows[sMenuRowCount++] = ROW_MAP0 + i;
+        sMenuRows[sMenuRowCount++] = ROW_MAP_RESET;
+        sMenuRows[sMenuRowCount++] = ROW_BACK;
+    }
+    if (sMenuCursor >= sMenuRowCount)
+        sMenuCursor = sMenuRowCount - 1;
+}
+
+static void MenuRowText(int row, char *left, char *right, size_t n)
+{
+    right[0] = 0;
+    switch (row) {
+        case ROW_RESUME: snprintf(left, n, "Resume"); break;
+        case ROW_RESTART: snprintf(left, n, "Restart act"); break;
+        case ROW_CONTROLS: snprintf(left, n, "Controls"); break;
+        case ROW_CHEATS: snprintf(left, n, "Cheats"); break;
+        case ROW_EXIT: snprintf(left, n, "Exit game"); break;
+        case ROW_MAP_RESET: snprintf(left, n, "Reset to defaults"); break;
+        case ROW_BACK: snprintf(left, n, "Back"); break;
+        default:
+            if (row >= ROW_CHEAT0 && row <= ROW_CHEAT_LAST) {
+                snprintf(left, n, "%s", sCheatNames[row - ROW_CHEAT0]);
+                snprintf(right, n, "%s", *sCheatKeys[row - ROW_CHEAT0].value ? "On" : "Off");
+            } else if (row >= ROW_MAP0 && row <= ROW_MAP_LAST) {
+                int m = row - ROW_MAP0;
+                snprintf(left, n, "GBA %s", sMapNames[m]);
+                snprintf(right, n, "%s", sCaptureMap == m ? "press..." : SwitchButtonName(sMap[m]));
+            }
+            break;
+    }
+}
 
 static void MenuFillRect(int x0, int y0, int w, int h, u16 color, int vw, int vh)
 {
@@ -696,21 +857,76 @@ static void MenuText(int x, int y, const char *str, u16 color, int vw, int vh)
 
 static void MenuDraw(bool classic)
 {
+    static const char *const titles[] = { "Sonic Advance NX", "Cheats", "Controls" };
     const int vw = classic ? 240 : DISPLAY_WIDTH, vh = classic ? 160 : DISPLAY_HEIGHT;
-    const int bw = 160, bh = 40 + MENU_ITEMS * 14;
+    const int rowH = 12;
+    const int bw = 208, bh = 34 + sMenuRowCount * rowH + (sMenuPage == PAGE_CONTROLS ? 12 : 0);
     const int bx = (vw - bw) / 2, by = (vh - bh) / 2;
+    const char *title = titles[sMenuPage];
     MenuDarken(vw, vh);
     MenuFillRect(bx, by, bw, bh, 0x2884, vw, vh);
     MenuFillRect(bx, by, bw, 1, 0x7FFF, vw, vh);
     MenuFillRect(bx, by + bh - 1, bw, 1, 0x7FFF, vw, vh);
-    MenuText(bx + (bw - 17 * 8) / 2, by + 8, "Sonic Advance NX", 0x03FF, vw, vh);
-    for (int i = 0; i < MENU_ITEMS; i++) {
+    MenuText(bx + (bw - (int)strlen(title) * 8) / 2, by + 8, title, 0x03FF, vw, vh);
+    for (int i = 0; i < sMenuRowCount; i++) {
+        char full[40], right[40];
+        MenuRowText(sMenuRows[i], full, right, sizeof(full));
         u16 color = (i == sMenuCursor) ? 0x7FFF : 0x5294;
-        int ty = by + 28 + i * 14;
+        int ty = by + 26 + i * rowH;
         if (i == sMenuCursor)
-            MenuText(bx + 16, ty, ">", 0x03FF, vw, vh);
-        MenuText(bx + 32, ty, sMenuItems[i], color, vw, vh);
+            MenuText(bx + 8, ty, ">", 0x03FF, vw, vh);
+        MenuText(bx + 20, ty, full, color, vw, vh);
+        if (right[0])
+            MenuText(bx + bw - 12 - (int)strlen(right) * 8, ty, right, color, vw, vh);
     }
+    if (sMenuPage == PAGE_CONTROLS)
+        MenuText(bx + 20, by + bh - 14, sCaptureMap >= 0 ? "Press a button" : "A: change  B: back", 0x5294, vw, vh);
+}
+
+static void MenuClose(void)
+{
+    sMenuOpen = false;
+    sCaptureMap = -1;
+    if (sSettingsDirty) {
+        SaveSettings();
+        sSettingsDirty = false;
+    }
+    if (sAudioDevice != 0)
+        SDL_PauseAudioDevice(sAudioDevice, 0);
+    LogF("menu: %s\n", sExitRequested ? "exit game" : sRestartRequested ? "restart act" : "resume");
+}
+
+/* Opens a page with the cursor on the given row (first row if absent). */
+static void MenuGoPage(int page, int row)
+{
+    sMenuPage = page;
+    sMenuCursor = 0;
+    MenuBuildRows();
+    for (int i = 0; i < sMenuRowCount; i++)
+        if (sMenuRows[i] == row)
+            sMenuCursor = i;
+}
+
+/* Controls page, waiting for a button: the first allowed Switch button pressed
+ * becomes the GBA button's; a GBA button that had it takes the old one (swap). */
+static void MenuCaptureUpdate(void)
+{
+    for (int i = 0; i < NUM_SWITCH_BUTTONS; i++) {
+        u64 bit = sSwitchButtons[i].bit;
+        if (!(sButtonsDown & bit))
+            continue;
+        u64 old = sMap[sCaptureMap];
+        for (int m = 0; m < MAP_COUNT; m++)
+            if (m != sCaptureMap && sMap[m] == bit)
+                sMap[m] = old;
+        sMap[sCaptureMap] = bit;
+        LogF("controls: GBA %s on Switch %s\n", sMapNames[sCaptureMap], sSwitchButtons[i].name);
+        sSettingsDirty = true;
+        sCaptureMap = -1;
+        return;
+    }
+    if (armGetSystemTick() > sCaptureDeadline)
+        sCaptureMap = -1;
 }
 
 /* Returns true while the menu holds the game paused. */
@@ -720,32 +936,65 @@ static bool MenuUpdate(void)
     if (!sMenuOpen) {
         if ((sButtonsHeld & combo) == combo && (sButtonsDown & combo)) {
             sMenuOpen = true;
-            sMenuCursor = 0;
             sHoldStartSelect = true;
+            MenuGoPage(PAGE_MAIN, ROW_RESUME);
             if (sAudioDevice != 0)
                 SDL_PauseAudioDevice(sAudioDevice, 1);
             LogF("menu: open\n");
         }
         return sMenuOpen;
     }
+    if (sCaptureMap >= 0) {
+        MenuCaptureUpdate();
+        return true;
+    }
+    MenuBuildRows();
     if (sButtonsDown & (HidNpadButton_Up | HidNpadButton_StickLUp))
-        sMenuCursor = (sMenuCursor + MENU_ITEMS - 1) % MENU_ITEMS;
+        sMenuCursor = (sMenuCursor + sMenuRowCount - 1) % sMenuRowCount;
     if (sButtonsDown & (HidNpadButton_Down | HidNpadButton_StickLDown))
-        sMenuCursor = (sMenuCursor + 1) % MENU_ITEMS;
-    bool close = (sButtonsDown & HidNpadButton_B) != 0;
-    if (sButtonsDown & HidNpadButton_A) {
-        if (sMenuCursor == 1)
-            sExitRequested = true;
-        close = true;
+        sMenuCursor = (sMenuCursor + 1) % sMenuRowCount;
+
+    if (sButtonsDown & HidNpadButton_B) {
+        if (sMenuPage == PAGE_MAIN) {
+            MenuClose();
+            return false;
+        }
+        MenuGoPage(PAGE_MAIN, sMenuPage == PAGE_CHEATS ? ROW_CHEATS : ROW_CONTROLS);
+        return true;
     }
-    if (close) {
-        sMenuOpen = false;
-        if (sAudioDevice != 0)
-            SDL_PauseAudioDevice(sAudioDevice, 0);
-        LogF("menu: %s\n", sExitRequested ? "exit game" : "resume");
-        return !sExitRequested ? false : true;
+    bool left = (sButtonsDown & (HidNpadButton_Left | HidNpadButton_StickLLeft)) != 0;
+    bool right = (sButtonsDown & (HidNpadButton_Right | HidNpadButton_StickLRight)) != 0;
+    bool press = (sButtonsDown & HidNpadButton_A) != 0;
+    int row = sMenuRows[sMenuCursor];
+
+    if (row >= ROW_CHEAT0 && row <= ROW_CHEAT_LAST && (press || left || right)) {
+        u8 *v = sCheatKeys[row - ROW_CHEAT0].value;
+        *v = !*v;
+        sSettingsDirty = true;
+        LogF("cheats: %s %s\n", sCheatKeys[row - ROW_CHEAT0].key, *v ? "on" : "off");
+        return true;
     }
-    return true;
+    if (!press)
+        return true;
+    switch (row) {
+        case ROW_RESUME: MenuClose(); return false;
+        case ROW_RESTART: sRestartRequested = true; MenuClose(); return false;
+        case ROW_EXIT: sExitRequested = true; MenuClose(); return true;
+        case ROW_CONTROLS: MenuGoPage(PAGE_CONTROLS, ROW_MAP0); return true;
+        case ROW_CHEATS: MenuGoPage(PAGE_CHEATS, ROW_CHEAT0); return true;
+        case ROW_BACK: MenuGoPage(PAGE_MAIN, sMenuPage == PAGE_CHEATS ? ROW_CHEATS : ROW_CONTROLS); return true;
+        case ROW_MAP_RESET:
+            memcpy(sMap, sMapDefault, sizeof(sMap));
+            sSettingsDirty = true;
+            LogF("controls: reset to defaults\n");
+            return true;
+        default:
+            if (row >= ROW_MAP0 && row <= ROW_MAP_LAST) {
+                sCaptureMap = row - ROW_MAP0;
+                sCaptureDeadline = armGetSystemTick() + armNsToTicks(6000000000ULL);
+            }
+            return true;
+    }
 }
 
 /* ------------------------------------------------------------------------ */
@@ -868,6 +1117,11 @@ void VBlankIntrWait(void)
     }
     if (sExitRequested)
         Shutdown();
+    if (sRestartRequested) {
+        sRestartRequested = false;
+        LogF("stage: restart act (level %d)\n", (int)gCurrentLevel);
+        SonAdv_RestartAct();
+    }
 
     VDraw();
     if (sButtonsDown & HidNpadButton_StickR)
@@ -919,6 +1173,7 @@ int main(int argc, char **argv)
     padInitializeDefault(&sPad);
 
     ReadSaveFile();
+    LoadSettings();
 
     /* Keep the original multiplayer screen from claiming the display. */
     REG_RCNT = 0x8000;

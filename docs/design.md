@@ -61,7 +61,11 @@ A 4:3 (original 240x160) option: the width is a compile-time constant throughout
 
 ## Cheats (port menu, all off by default)
 
-Direct writes to game state, no codes needed: infinite lives, keep rings (no ring loss on hit), invincibility, unlock all characters (Amy included) and zones, stage select, and possibly Super Sonic in any stage. The exact list is checked against the game's code and manual before building.
+Built (switch-test5): infinite lives, keep rings when hit, no damage (enemies and hits; pits, lava, crushing and drowning still kill), all zones in course select (without changing the save). Settings are kept in settings.ini. Amy is already selectable at character select. Super Sonic in any stage: not planned.
+
+## Port menu (Minus + Plus)
+
+Resume, Restart act (during a single-player act: back to the act start, no life lost), Controls (each GBA button on any Switch button), Cheats, Exit game.
 
 ## Quality of life ideas (for Mark to pick)
 

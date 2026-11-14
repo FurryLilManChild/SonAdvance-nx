@@ -12,6 +12,12 @@
  *   LAYERS=hex    DISPCNT layer mask to keep while drawing (default 0x1F00).
  *   RESULTS_AT=frame  show the end-of-act results (use with LEVEL).
  *   SPECIAL_AT=frame  enter the special stage (use with LEVEL).
+ *   RESTART_AT=frame  restart the act (the port menu action).
+ *   CHEATS=list   any of lives,rings,damage,zones (comma separated).
+ *   HIT_AT=frame  hit the player once (Coll_DamagePlayer). KILL_AT=frame: lose a life.
+ *   CHARSEL_AT=frame  open the character select (single player).
+ *   COURSE_AT=frame  open the course select (single player, character CHAR).
+ *   STATUS=1      print rings, lives and level every 60 frames.
  *   LEVEL=n LEVEL_AT=frame CHAR=c   jump straight into level n (0..13) at that
  *                 frame as character c (0 Sonic, 1 Tails, 2 Knuckles, 3 Amy).
  * Frame files are named f<frame>s.ppm when a stage is running, else f<frame>m.ppm.
@@ -28,6 +34,8 @@
 #include "game/globals.h"
 #include "game/shared/stage/stage.h"
 #include "game/sa1/special_stage/main.h"
+#include "sonadv_port.h"
+#include "game/shared/stage/player.h"
 
 extern void ApplyGameStageSettingsAndStart(void);
 
@@ -46,7 +54,7 @@ static int sNumCaps;
 static const char *sCapDir = "caps";
 static u16 sLayerMask = 0x1F00;
 static int sInit;
-static int sLevel = -1, sLevelAt = -1, sChar, sSpecialAt = -1, sResultsAt = -1;
+static int sLevel = -1, sLevelAt = -1, sChar, sSpecialAt = -1, sResultsAt = -1, sRestartAt = -1, sStatus, sHitAt = -1, sKillAt = -1, sCourseAt = -1;
 static uint16_t sImage[DISPLAY_WIDTH * DISPLAY_HEIGHT];
 
 static u16 ParseKeys(const char *s)
@@ -109,6 +117,25 @@ static void Init(void)
     }
     if (getenv("RESULTS_AT"))
         sResultsAt = atoi(getenv("RESULTS_AT"));
+    if (getenv("RESTART_AT"))
+        sRestartAt = atoi(getenv("RESTART_AT"));
+    if (getenv("HIT_AT"))
+        sHitAt = atoi(getenv("HIT_AT"));
+    if (getenv("KILL_AT"))
+        sKillAt = atoi(getenv("KILL_AT"));
+    if (getenv("COURSE_AT")) {
+        sCourseAt = atoi(getenv("COURSE_AT"));
+        sChar = getenv("CHAR") ? atoi(getenv("CHAR")) : 0;
+    }
+    if (getenv("STATUS"))
+        sStatus = 1;
+    if (getenv("CHEATS")) {
+        const char *c = getenv("CHEATS");
+        gSonAdvCheats.infiniteLives = strstr(c, "lives") != NULL;
+        gSonAdvCheats.keepRings = strstr(c, "rings") != NULL;
+        gSonAdvCheats.noDamage = strstr(c, "damage") != NULL;
+        gSonAdvCheats.allZones = strstr(c, "zones") != NULL;
+    }
     if (getenv("SPECIAL_AT"))
         sSpecialAt = atoi(getenv("SPECIAL_AT"));
     if (getenv("LAYERS"))
@@ -181,6 +208,43 @@ void Harness_Frame(void)
         ApplyGameStageSettingsAndStart();
         fprintf(stderr, "harness: started level %d at frame %u\n", sLevel, sFrame);
     }
+    if ((int)sFrame == sRestartAt) {
+        fprintf(stderr, "harness: restart act at frame %u (can %d)\n", sFrame, (int)SonAdv_CanRestartAct());
+        SonAdv_RestartAct();
+    }
+    if ((int)sFrame == sCourseAt) {
+        extern void CreateCourseSelect(bool8 arg0);
+        TasksDestroyAll();
+        PAUSE_BACKGROUNDS_QUEUE();
+        gBgSpritesCount = 0;
+        PAUSE_GRAPHICS_QUEUE();
+        gGameMode = GAME_MODE_SINGLE_PLAYER;
+        gSelectedCharacter = sChar;
+        CreateCourseSelect(FALSE);
+        fprintf(stderr, "harness: course select at frame %u\n", sFrame);
+    }
+    if (getenv("CHARSEL_AT") && (int)sFrame == atoi(getenv("CHARSEL_AT"))) {
+        extern void CreateCharacterSelectionScreen(u8 character);
+        TasksDestroyAll();
+        PAUSE_BACKGROUNDS_QUEUE();
+        gBgSpritesCount = 0;
+        PAUSE_GRAPHICS_QUEUE();
+        gGameMode = GAME_MODE_SINGLE_PLAYER;
+        CreateCharacterSelectionScreen(0);
+        fprintf(stderr, "harness: character select at frame %u\n", sFrame);
+    }
+    if ((int)sFrame == sHitAt) {
+        extern bool32 Coll_DamagePlayer(Player * p);
+        int r = Coll_DamagePlayer(&gPlayer);
+        fprintf(stderr, "harness: hit at frame %u -> %d, rings now %u\n", sFrame, r, (unsigned)gRingCount);
+    }
+    if ((int)sFrame == sKillAt) {
+        gPlayer.moveState |= MOVESTATE_DEAD;
+        fprintf(stderr, "harness: player dead at frame %u\n", sFrame);
+    }
+    if (sStatus && (sFrame % 60) == 0)
+        fprintf(stderr, "status f%u: level %d rings %u lives %u time %u stage %d\n", sFrame, (int)gCurrentLevel,
+                (unsigned)gRingCount, (unsigned)gNumLives, (unsigned)gCourseTime, gGameStageTask != NULL);
     if ((int)sFrame == sResultsAt) {
         extern u16 CreateStageResults(u32 courseTime, u16 ringCount, u8 spRingCount);
         CreateStageResults(gCourseTime, gRingCount, 0);

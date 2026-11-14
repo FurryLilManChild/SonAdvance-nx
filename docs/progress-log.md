@@ -2,6 +2,14 @@
 
 Newest first.
 
+## 2026-11-13: switch-test4 and switch-test5 built
+
+- switch-test3 report (Mark): everything good except "the software was closed because an error occurred" when exiting from the port menu. The log ends right after "exit:"; no crash report. Likely cause: our shutdown unmounted the SD card and closed the log, then newlib closed stderr (a file on the unmounted card), and the crash handler had no card to write to. switch-test4: exit through AM the way mp2-nx does (mode set at exit time, __libnx_exit ends the process if the applet teardown did not take over), card stays mounted, each exit step logged, crash handler opens the card itself. Mark: test it, but no more build rounds just for this.
+- Phase 4 (switch-test5): port menu pages. Main: Resume, Restart act (single-player act only), Controls, Cheats, Exit game. Controls: each GBA button (A, B, L, R, Start, Select) on any Switch button, swap on conflict, reset. Cheats (0015, all off by default): infinite lives (the life is given back before the game takes it), keep rings when hit (knockback only), no damage (Coll_DamagePlayer refuses for the player; pits, lava, crushing and drowning still kill), all zones in course select (count raised to every zone up to Final Zone; the save is not changed; X Zone still needs the emeralds). Settings saved to settings.ini next to the save.
+- Restart act: the game's own life-lost teardown, then GameStageStart (start of the act, no checkpoint, 0 rings, timer reset, title card again). No life lost.
+- Checked in the host harness (new RESTART_AT, CHEATS, HIT_AT, KILL_AT, COURSE_AT, CHARSEL_AT, STATUS): restart replays the title card with rings and timer at 0; a hit keeps 8 rings with keep rings, is refused with no damage, drops all rings without cheats; a lost life leaves 3 lives with infinite lives, 2 without; course select lists Zone 1 Act 1 through Final Zone. The port menu itself (drawing and buttons) runs only on the Switch.
+- Character select shows Amy even with an empty save in the harness; nothing to unlock there. Language: the game's own Options menu has the setting.
+
 ## 2026-11-13: switch-test3 built
 
 - Mark's switch-test2 report: port menu text mirrored (wrong bit order in the font reader), game screen glitching behind the menu and a crash at RunDMAs (the menu re-ran the game's draw with its HBlank DMAs every frame; now a snapshot taken when the menu opens), crash on exit (applet exit mode set to 1; both logged sessions reached a clean exit, waiting on what Mark saw).

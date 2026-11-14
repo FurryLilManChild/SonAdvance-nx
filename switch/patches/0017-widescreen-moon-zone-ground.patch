@@ -1,0 +1,50 @@
+--- a/src/game/shared/stage/camera.c
++++ b/src/game/shared/stage/camera.c
+@@ -517,8 +517,15 @@
+ #ifndef COLLECT_RINGS_ROM
+     if (IS_EXTRA_STAGE(level)) {
+ #if (GAME == GAME_SA1)
++#if !WIDESCREEN_HACK
+         gBgCntRegs[0]
+             = BGCNT_TXT256x256 | (BGCNT_PRIORITY(2) | BGCNT_SCREENBASE(CAM_SCREENBASE_MAP_BACK) | BGCNT_16COLOR | BGCNT_CHARBASE(0));
++#else
++        // SonAdvance-nx: the ground layer of The Moon is drawn 54 tiles wide in
++        // widescreen; a 256-pixel map wrapped its right part over its left.
++        gBgCntRegs[0]
++            = BGCNT_TXT512x512 | (BGCNT_PRIORITY(2) | BGCNT_SCREENBASE(CAM_SCREENBASE_MAP_BACK) | BGCNT_16COLOR | BGCNT_CHARBASE(0));
++#endif
+         txtSize = ((STGBG_WIDTH(bgDim) + 0x1F) >> 6 | ((STGBG_HEIGHT(bgDim) + 0x1F) >> 6) << 1) << 0xE;
+         gBgCntRegs[1] = txtSize | BGCNT_PRIORITY(3) | BGCNT_SCREENBASE(STGBG_SCREENBASE(bgDim)) | BGCNT_CHARBASE(STGBG_CHARBASE(bgDim));
+ #elif (GAME == GAME_SA2)
+--- a/src/platform/shared/wide_bg.c
++++ b/src/platform/shared/wide_bg.c
+@@ -7,6 +7,7 @@
+ #include "core.h"
+ #include "game/globals.h"
+ #include "game/shared/stage/stage.h"
++#include "game/shared/stage/camera.h"
+ 
+ #if WIDESCREEN_HACK && (GAME == GAME_SA1)
+ extern u8 gWideBgZoom[4];
+@@ -39,6 +40,21 @@
+             gWideBgRowMap[1][line] = line < 160 ? -1 : (s16)(128 + ((line - 160) * 32) / (DISPLAY_HEIGHT - 160));
+         gWideBgRowMapOn[1] = 1;
+     }
++
++    // The Moon (extra stage): the ground (layer 0) has art down to map pixel
++    // row 248; with the camera at its fixed height (y 48) that is screen line
++    // 200, above the bottom of the taller widescreen picture (the GBA showed
++    // down to line 160). Lines past it mirror the ground above them, which
++    // keeps the texture continuous (a repeated band showed stacked craters).
++    if (gGameStageTask != NULL && gCurrentLevel == LEVEL_INDEX(ZONE_7, ACT_THE_MOON)) {
++        const int vofs = REG_BG0VOFS & 0x1FF;
++        const int endLine = 248 - gStageBackgroundsRam.unk80.scrollY;
++        if (endLine > 16 && endLine < DISPLAY_HEIGHT) {
++            for (int line = 0; line < DISPLAY_HEIGHT; line++)
++                gWideBgRowMap[0][line] = line < endLine ? -1 : (s16)(endLine - 1 - ((line - endLine) % endLine) + vofs);
++            gWideBgRowMapOn[0] = 1;
++        }
++    }
+ }
+ #else
+ void WideBg_Update(void) { }

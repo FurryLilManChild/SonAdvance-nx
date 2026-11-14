@@ -1,0 +1,33 @@
+--- a/src/game/sa1/ui/course_select.c
++++ b/src/game/sa1/ui/course_select.c
+@@ -1,6 +1,6 @@
+ #include "global.h"
+ #include "sonadv_port.h"
+-#define SONADV_ALL_ZONES_COUNT 14
++#define SONADV_ALL_ZONES_COUNT 15
+ #include "core.h"
+ #include "sprite.h"
+ 
+@@ -187,10 +187,6 @@
+             unlockedLevelCount = gUnknown_03005140 + 2;
+         } else {
+             unlockedLevelCount = LOADED_SAVE->unlockedLevels[gSelectedCharacter] + 2;
+-            // SonAdvance-nx cheat: every zone, as if all were cleared (save unchanged).
+-            if (gSonAdvCheats.allZones && (unlockedLevelCount < SONADV_ALL_ZONES_COUNT)) {
+-                unlockedLevelCount = SONADV_ALL_ZONES_COUNT;
+-            }
+         }
+ 
+         if (gSelectedCharacter == CHARACTER_SONIC) {
+@@ -210,6 +206,11 @@
+                 unlockedLevelCount = 14;
+             }
+         }
++        // SonAdvance-nx cheat: every stage through X Zone and The Moon, for every
++        // character, as if all were cleared (the save is not changed).
++        if (gSonAdvCheats.allZones && !IS_MULTI_PLAYER) {
++            unlockedLevelCount = SONADV_ALL_ZONES_COUNT;
++        }
+         if ((gGameMode != 0) && (unlockedLevelCount > 0xDU)) {
+             unlockedLevelCount = 13;
+         }

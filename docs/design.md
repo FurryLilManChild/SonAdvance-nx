@@ -61,7 +61,7 @@ A 4:3 (original 240x160) option: the width is a compile-time constant throughout
 
 ## Cheats (port menu, all off by default)
 
-Built (switch-test5): infinite lives, keep rings when hit, no damage (enemies and hits; pits, lava, crushing and drowning still kill), all stages in course select through Final Zone (X Zone) and Extra Zone (The Moon), for every character, without changing the save; Super Sonic in every act (Sonic: gold palette, invincible, fast). Settings are kept in settings.ini. Amy is already selectable at character select.
+Built (switch-test5): infinite lives, keep rings when hit, no damage (enemies and hits; pits, lava, crushing and drowning still kill), all stages in course select through Final Zone (X Zone) and Extra Zone (The Moon), for every character, without changing the save. Super Sonic in every act: left out (Mark, Nov 13: the game's own Super Sonic only flies in the final stage and cannot be reused in normal acts; a recolored Sonic is not wanted). Settings are kept in settings.ini. Amy is already selectable at character select.
 
 ## Port menu (Minus + Plus)
 

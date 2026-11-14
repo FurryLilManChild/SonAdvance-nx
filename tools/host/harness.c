@@ -13,7 +13,7 @@
  *   RESULTS_AT=frame  show the end-of-act results (use with LEVEL).
  *   SPECIAL_AT=frame  enter the special stage (use with LEVEL).
  *   RESTART_AT=frame  restart the act (the port menu action).
- *   CHEATS=list   any of lives,rings,damage,zones,super (comma separated).
+ *   CHEATS=list   any of lives,rings,damage,zones (comma separated).
  *   HIT_AT=frame  hit the player once (Coll_DamagePlayer). KILL_AT=frame: lose a life.
  *   CHARSEL_AT=frame  open the character select (single player).
  *   COURSE_AT=frame  open the course select (single player, character CHAR).
@@ -156,7 +156,6 @@ static void Init(void)
         gSonAdvCheats.keepRings = strstr(c, "rings") != NULL;
         gSonAdvCheats.noDamage = strstr(c, "damage") != NULL;
         gSonAdvCheats.allZones = strstr(c, "zones") != NULL;
-        gSonAdvCheats.superSonic = strstr(c, "super") != NULL;
     }
     if (getenv("SPECIAL_AT"))
         sSpecialAt = atoi(getenv("SPECIAL_AT"));

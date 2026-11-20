@@ -1,0 +1,58 @@
+--- a/src/game/sa1/special_stage/main.c
++++ b/src/game/sa1/special_stage/main.c
+@@ -273,6 +273,19 @@
+ extern u16 gUnknown_08487140[][2];
+ extern u8 gUnknown_08487134[NUM_TIME_ATTACK_ZONES * ACTS_PER_ZONE];
+ 
++// SonAdvance-nx: the half-pipe is four 19x14-tile quarters of tilemap 55 in
++// a 512x256 map (BG2). The GBA keeps such a map as two 32-column screen
++// blocks side by side; the portable renderer and DrawBackground (64-entry
++// rows for 512-wide maps) keep it as one map 64 tiles wide. The quarters'
++// GBA addresses put three of them in the wrong place, which drew the stage
++// as scattered pieces. PIPE_MAP gives the same tile position in the 64-wide
++// layout: screen block sb, row r, column c.
++#if PORTABLE
++#define PIPE_MAP(sb, r, c) ((void *)(BG_VRAM + 0xC000 + (((r) * 64) + ((sb) * 32) + (c)) * 2))
++#else
++#define PIPE_MAP(sb, r, c) ((void *)(BG_VRAM + 0xC000 + (sb) * 0x800 + (((r) * 32) + (c)) * 2))
++#endif
++
+ const Background gUnknown_08486FF4 = {
+     .graphics = {
+         .src = NULL,
+@@ -293,7 +306,7 @@
+         .dest = (void*)(BG_VRAM + 0x4000),
+         .size = 0,
+     },
+-    .layoutVram = (void*)(BG_VRAM + 0xC01A),
++    .layoutVram = PIPE_MAP(0, 0, 13), // 0xC01A on the GBA
+     .tilemapId = 55,
+     .targetTilesX = (152 / 8),
+     .targetTilesY = (112 / 8),
+@@ -309,7 +322,7 @@
+         .dest = (void*)(BG_VRAM + 0x4000),
+         .size = 0,
+     },
+-    .layoutVram = (void*)(BG_VRAM + 0xC39A),
++    .layoutVram = PIPE_MAP(0, 14, 13), // 0xC39A on the GBA
+     .tilemapId = 55,
+     .targetTilesX = (152 / 8),
+     .targetTilesY = (112 / 8),
+@@ -323,7 +336,7 @@
+         .dest = (void*)(BG_VRAM + 0x4000),
+         .size = 0,
+     },
+-    .layoutVram = (void*)(BG_VRAM + 0xC800),
++    .layoutVram = PIPE_MAP(1, 0, 0), // 0xC800 on the GBA
+     .tilemapId = 55,
+     .targetTilesX = (152 / 8),
+     .targetTilesY = (112 / 8),
+@@ -337,7 +350,7 @@
+         .dest = (void*)(BG_VRAM + 0x4000),
+         .size = 0,
+     },
+-    .layoutVram = (void*)(BG_VRAM + 0xCB80),
++    .layoutVram = PIPE_MAP(1, 14, 0), // 0xCB80 on the GBA
+     .tilemapId = 55,
+     .targetTilesX = (152 / 8),
+     .targetTilesY = (112 / 8),

@@ -1,0 +1,14 @@
+--- a/src/game/sa1/ui/game_2_0.c
++++ b/src/game/sa1/ui/game_2_0.c
+@@ -245,7 +245,10 @@
+             sp00.tiles = *(&gUiGraphics[UIGFX_TIMER_DIGITS].tiles) + (temp_r5 << 7);
+             sp00.palette = *(&gUiGraphics[UIGFX_TIMER_DIGITS].palette);
+             sp00.vramC = OBJ_VRAM0 + 0x69E0;
+-            sp00.tilesSize = 0xE00;
++            // SonAdvance-nx: was 0xE00, a decomp typo (the ROM loads 0x40).
++            // It copied 3.5 KB past the digit over the "RINGS" text of the
++            // special stage banner whenever the ring target has two digits.
++            sp00.tilesSize = 2 * TILE_SIZE_4BPP;
+             sp00.paletteSize = 0x20;
+             sp00.unk28 = 6;
+             sp00.unk2A = 13;

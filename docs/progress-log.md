@@ -2,6 +2,13 @@
 
 Newest first.
 
+## 2026-11-20: special stage visuals diagnosed (no Switch build yet)
+
+- Mark's switch-test14 replays: the half-pipe drawn as scattered pieces with tile garbage over most of the screen, and the "GET 60 RINGS" banner garbled.
+- Half-pipe: BG2 is a 512x256 map built from four 19x14-tile quarters of tilemap 55. Their VRAM addresses (0xC01A, 0xC39A, 0xC800, 0xCB80) assume the GBA layout of two 32-column screen blocks side by side, but the portable renderer and DrawBackground keep a 512-wide map as one map 64 tiles wide, so three quarters landed in the wrong place. 0024 computes the same tile positions for the 64-wide layout (PIPE_MAP).
+- Banner: decomp typo in the NONMATCH sub_805BC94 (game_2_0.c). For a two-digit ring target it loads the first digit with 0xE00 bytes instead of 0x40 (the ROM's assembly has 0x40), copying 3.5 KB of unrelated UI graphics over the "RINGS" text. Found by tracing the graphics queue in the host harness. 0025 fixes the size. Three-digit and one-digit targets were not affected.
+- Host harness, wide and 240x160 builds: special stages 1, 4 and 7 now draw the whole pipe and a clean banner, and the two builds match.
+
 ## 2026-11-20: switch-test14 built (special stages from the port menu)
 
 - switch-test12/13: Boss 1's hammer arm. 0020 records each sprite's full y (above the top edge vs near the bottom) per OAM slot, since 8-bit OAM y is ambiguous on 240 lines. The real cause of the arm in the top-left corner was the decomp's placeholder UnusedTransform (called TransformSprite, ignoring gSpriteTransformX/Y); 0021 is a native version from the ARM. Mark: Boss 1 now looks and plays right.

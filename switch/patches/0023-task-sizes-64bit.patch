@@ -1,0 +1,33 @@
+--- a/src/game/sa1/special_stage/main.c
++++ b/src/game/sa1/special_stage/main.c
+@@ -2168,7 +2168,7 @@
+     u8 *temp_r1;
+     u8 var_r0;
+ 
+-    SpStage74 *strc74 = TASK_DATA(TaskCreate(sub_802D4C4, 0x74U, 0x1500U, 0U, NULL));
++    SpStage74 *strc74 = TASK_DATA(TaskCreate(sub_802D4C4, sizeof(SpStage74), 0x1500U, 0U, NULL) /* SonAdvance-nx: was 0x74, the GBA size; larger on 64-bit */);
+     s = &strc74->s;
+ 
+     switch (msg) {
+--- a/src/game/sa1/menus/player_data.c
++++ b/src/game/sa1/menus/player_data.c
+@@ -82,7 +82,7 @@
+     gBldRegs.bldY = 0;
+     gBgScrollRegs[0][0] = 0;
+     gBgScrollRegs[0][1] = 0;
+-    t = TaskCreate(Task_PlayerDataMenuInit, 0x11CU, 0x2000U, 0U, TaskDestructor_PlayerDataMenu);
++    t = TaskCreate(Task_PlayerDataMenuInit, sizeof(PlayerDataMenu), 0x2000U, 0U, TaskDestructor_PlayerDataMenu) /* SonAdvance-nx: was 0x11C */;
+ 
+     menu = TASK_DATA(t);
+     s = &menu->s;
+--- a/src/game/sa1/menus/options.c
++++ b/src/game/sa1/menus/options.c
+@@ -109,7 +109,7 @@
+     gBldRegs.bldCnt = 0;
+     gBldRegs.bldY = 0;
+ 
+-    menu = TASK_DATA(TaskCreate(Task_OptionsMenuMain, 0x344U, 0x2000U, 0U, TaskDestructor_OptionsMenu));
++    menu = TASK_DATA(TaskCreate(Task_OptionsMenuMain, sizeof(OptionsMenu), 0x2000U, 0U, TaskDestructor_OptionsMenu) /* SonAdvance-nx: was 0x344 */);
+     menu->unk33F = 0;
+     menu->unk33C = 0;
+     menu->unk33E = 0;

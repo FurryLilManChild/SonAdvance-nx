@@ -11,7 +11,8 @@
  *   CAPDIR=dir    where frames go (default ./caps).
  *   LAYERS=hex    DISPCNT layer mask to keep while drawing (default 0x1F00).
  *   RESULTS_AT=frame  show the end-of-act results (use with LEVEL).
- *   SPECIAL_AT=frame  enter the special stage (use with LEVEL).
+ *   SPECIAL_AT=frame  enter the special stage (use with LEVEL); with SPECIAL_N=0..6 the
+ *                 port menu entry for that stage.
  *   RESTART_AT=frame  restart the act (the port menu action).
  *   CHEATS=list   any of lives,rings,damage,zones (comma separated).
  *   HIT_AT=frame  hit the player once (Coll_DamagePlayer). KILL_AT=frame: lose a life.
@@ -277,7 +278,10 @@ void Harness_Frame(void)
         CreateStageResults(gCourseTime, gRingCount, 0);
         fprintf(stderr, "harness: stage results at frame %u\n", sFrame);
     }
-    if ((int)sFrame == sSpecialAt) {
+    if (getenv("SPECIAL_N") && (int)sFrame == sSpecialAt) {
+        SonAdv_EnterSpecialStage(atoi(getenv("SPECIAL_N")));
+        fprintf(stderr, "harness: port menu special stage %s at frame %u (level now %d)\n", getenv("SPECIAL_N"), sFrame, (int)gCurrentLevel);
+    } else if ((int)sFrame == sSpecialAt) {
         // Same steps the special spring takes (special_spring.c).
         TasksDestroyAll();
         PAUSE_BACKGROUNDS_QUEUE();

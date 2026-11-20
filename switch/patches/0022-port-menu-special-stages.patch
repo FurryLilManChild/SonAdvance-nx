@@ -1,0 +1,63 @@
+--- a/include/sonadv_port.h
++++ b/include/sonadv_port.h
+@@ -28,5 +28,9 @@
+ bool32 SonAdv_CanRestartAct(void);
+ // Back to the start of the current act: no checkpoint, 0 rings, timer reset, no life lost.
+ void SonAdv_RestartAct(void);
++// Into special stage n (0..6) the way a special spring does it; afterwards the
++// game continues at the start of the first act of that stage's zone.
++#define SONADV_NUM_SPECIAL_STAGES 7
++void SonAdv_EnterSpecialStage(int n);
+ 
+ #endif
+--- a/src/platform/shared/sonadv_port.c
++++ b/src/platform/shared/sonadv_port.c
+@@ -6,6 +6,9 @@
+ #include "lib/m4a/m4a.h"
+ #include "game/globals.h"
+ #include "game/shared/stage/stage.h"
++#include "game/shared/stage/player.h"
++#include "game/shared/stage/camera.h"
++#include "game/sa1/stage/spawn_positions.h"
+ #include "sonadv_port.h"
+ 
+ SonAdvCheats gSonAdvCheats;
+@@ -40,7 +43,38 @@
+ 
+     GameStageStart();
+ }
++// Special stage n belongs to the first act of each zone (the game's own table,
++// gUnknown_08487134: levels 0, 2, 4, 6, 7, 8 and 10 lead to stages 0 to 6).
++static const u8 sSpecialStageLevels[SONADV_NUM_SPECIAL_STAGES] = { 0, 2, 4, 6, 7, 8, 10 };
++extern void CreateSpecialStageIntro(void);
++
++// The special spring's own steps (special_spring.c). Coming back, the game
++// rebuilds the stage at the spring's position less 16 pixels and then makes
++// gSpecialStageReturnX/Y the checkpoint; both are set to the act's start, so
++// the player lands at the start of that act with the course timer kept.
++void SonAdv_EnterSpecialStage(int n)
++{
++    if (!SonAdv_CanRestartAct() || n < 0 || n >= SONADV_NUM_SPECIAL_STAGES)
++        return;
++
++    gCurrentLevel = sSpecialStageLevels[n];
++    gSpecialStageReturnX = gSpawnPositions[gCurrentLevel][0];
++    gSpecialStageReturnY = gSpawnPositions[gCurrentLevel][1];
++    gPlayer.checkPointX = gSpecialStageReturnX + 16;
++    gPlayer.checkPointY = gSpecialStageReturnY + 16;
++
++    gFlags &= ~(FLAGS_PAUSE_GAME | FLAGS_EXECUTE_HBLANK_COPY);
++    m4aMPlayAllStop();
++
++    TasksDestroyAll();
++    PAUSE_BACKGROUNDS_QUEUE();
++    gBgSpritesCount = 0;
++    PAUSE_GRAPHICS_QUEUE();
++
++    CreateSpecialStageIntro();
++}
+ #else
++void SonAdv_EnterSpecialStage(int n) { (void)n; }
+ bool32 SonAdv_CanRestartAct(void) { return FALSE; }
+ void SonAdv_RestartAct(void) { }
+ #endif

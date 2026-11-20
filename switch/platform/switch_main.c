@@ -841,13 +841,15 @@ static bool sSettingsDirty;
 
 /* Pages: main, cheats, controls. Rows are built each frame (Restart act only
  * shows during a single-player act). */
-enum { PAGE_MAIN, PAGE_CHEATS, PAGE_CONTROLS };
+enum { PAGE_MAIN, PAGE_CHEATS, PAGE_CONTROLS, PAGE_SPECIAL };
 enum {
     ROW_RESUME, ROW_RESTART, ROW_CONTROLS, ROW_CHEATS, ROW_EXIT,              /* main */
     ROW_CHEAT0, ROW_CHEAT_LAST = ROW_CHEAT0 + 3,                             /* cheats */
     ROW_MAP0, ROW_MAP_LAST = ROW_MAP0 + MAP_COUNT - 1, ROW_MAP_RESET,        /* controls */
+    ROW_SPECIAL, ROW_SPECIAL0, ROW_SPECIAL_LAST = ROW_SPECIAL0 + SONADV_NUM_SPECIAL_STAGES - 1, /* special stages */
     ROW_BACK,
 };
+static int sSpecialRequested = -1;
 static const char *const sCheatNames[NUM_CHEATS] = { "Infinite lives", "Keep rings", "No damage", "All stages" };
 
 static int sMenuPage;
@@ -862,14 +864,20 @@ static void MenuBuildRows(void)
     sMenuRowCount = 0;
     if (sMenuPage == PAGE_MAIN) {
         sMenuRows[sMenuRowCount++] = ROW_RESUME;
-        if (SonAdv_CanRestartAct())
+        if (SonAdv_CanRestartAct()) {
             sMenuRows[sMenuRowCount++] = ROW_RESTART;
+            sMenuRows[sMenuRowCount++] = ROW_SPECIAL;
+        }
         sMenuRows[sMenuRowCount++] = ROW_CONTROLS;
         sMenuRows[sMenuRowCount++] = ROW_CHEATS;
         sMenuRows[sMenuRowCount++] = ROW_EXIT;
     } else if (sMenuPage == PAGE_CHEATS) {
         for (int i = 0; i < NUM_CHEATS; i++)
             sMenuRows[sMenuRowCount++] = ROW_CHEAT0 + i;
+        sMenuRows[sMenuRowCount++] = ROW_BACK;
+    } else if (sMenuPage == PAGE_SPECIAL) {
+        for (int i = 0; i < SONADV_NUM_SPECIAL_STAGES; i++)
+            sMenuRows[sMenuRowCount++] = ROW_SPECIAL0 + i;
         sMenuRows[sMenuRowCount++] = ROW_BACK;
     } else {
         for (int i = 0; i < MAP_COUNT; i++)
@@ -887,13 +895,16 @@ static void MenuRowText(int row, char *left, char *right, size_t n)
     switch (row) {
         case ROW_RESUME: snprintf(left, n, "Resume"); break;
         case ROW_RESTART: snprintf(left, n, "Restart act"); break;
+        case ROW_SPECIAL: snprintf(left, n, "Special stage"); break;
         case ROW_CONTROLS: snprintf(left, n, "Controls"); break;
         case ROW_CHEATS: snprintf(left, n, "Cheats"); break;
         case ROW_EXIT: snprintf(left, n, "Exit game"); break;
         case ROW_MAP_RESET: snprintf(left, n, "Reset to defaults"); break;
         case ROW_BACK: snprintf(left, n, "Back"); break;
         default:
-            if (row >= ROW_CHEAT0 && row <= ROW_CHEAT_LAST) {
+            if (row >= ROW_SPECIAL0 && row <= ROW_SPECIAL_LAST) {
+                snprintf(left, n, "Special stage %d", row - ROW_SPECIAL0 + 1);
+            } else if (row >= ROW_CHEAT0 && row <= ROW_CHEAT_LAST) {
                 snprintf(left, n, "%s", sCheatNames[row - ROW_CHEAT0]);
                 snprintf(right, n, "%s", *sCheatKeys[row - ROW_CHEAT0].value ? "On" : "Off");
             } else if (row >= ROW_MAP0 && row <= ROW_MAP_LAST) {
@@ -944,7 +955,7 @@ static void MenuText(int x, int y, const char *str, u16 color, int vw, int vh)
 
 static void MenuDraw(bool classic)
 {
-    static const char *const titles[] = { "Sonic Advance NX", "Cheats", "Controls" };
+    static const char *const titles[] = { "Sonic Advance NX", "Cheats", "Controls", "Special stage" };
     const int vw = classic ? 240 : DISPLAY_WIDTH, vh = classic ? 160 : DISPLAY_HEIGHT;
     const int rowH = 12;
     const int bw = 208, bh = 34 + sMenuRowCount * rowH + (sMenuPage == PAGE_CONTROLS ? 12 : 0);
@@ -980,7 +991,8 @@ static void MenuClose(void)
     }
     if (sAudioDevice != 0)
         SDL_PauseAudioDevice(sAudioDevice, 0);
-    LogF("menu: %s\n", sExitRequested ? "exit game" : sRestartRequested ? "restart act" : "resume");
+    LogF("menu: %s\n", sExitRequested ? "exit game" : sRestartRequested ? "restart act"
+                       : sSpecialRequested >= 0 ? "special stage" : "resume");
 }
 
 /* Opens a page with the cursor on the given row (first row if absent). */
@@ -1046,7 +1058,7 @@ static bool MenuUpdate(void)
             MenuClose();
             return false;
         }
-        MenuGoPage(PAGE_MAIN, sMenuPage == PAGE_CHEATS ? ROW_CHEATS : ROW_CONTROLS);
+        MenuGoPage(PAGE_MAIN, sMenuPage == PAGE_CHEATS ? ROW_CHEATS : sMenuPage == PAGE_SPECIAL ? ROW_SPECIAL : ROW_CONTROLS);
         return true;
     }
     bool left = (sButtonsDown & (HidNpadButton_Left | HidNpadButton_StickLLeft)) != 0;
@@ -1069,13 +1081,21 @@ static bool MenuUpdate(void)
         case ROW_EXIT: sExitRequested = true; MenuClose(); return true;
         case ROW_CONTROLS: MenuGoPage(PAGE_CONTROLS, ROW_MAP0); return true;
         case ROW_CHEATS: MenuGoPage(PAGE_CHEATS, ROW_CHEAT0); return true;
-        case ROW_BACK: MenuGoPage(PAGE_MAIN, sMenuPage == PAGE_CHEATS ? ROW_CHEATS : ROW_CONTROLS); return true;
+        case ROW_SPECIAL: MenuGoPage(PAGE_SPECIAL, ROW_SPECIAL0); return true;
+        case ROW_BACK:
+            MenuGoPage(PAGE_MAIN, sMenuPage == PAGE_CHEATS ? ROW_CHEATS : sMenuPage == PAGE_SPECIAL ? ROW_SPECIAL : ROW_CONTROLS);
+            return true;
         case ROW_MAP_RESET:
             memcpy(sMap, sMapDefault, sizeof(sMap));
             sSettingsDirty = true;
             LogF("controls: reset to defaults\n");
             return true;
         default:
+            if (row >= ROW_SPECIAL0 && row <= ROW_SPECIAL_LAST) {
+                sSpecialRequested = row - ROW_SPECIAL0;
+                MenuClose();
+                return false;
+            }
             if (row >= ROW_MAP0 && row <= ROW_MAP_LAST) {
                 sCaptureMap = row - ROW_MAP0;
                 sCaptureDeadline = armGetSystemTick() + armNsToTicks(6000000000ULL);
@@ -1208,6 +1228,11 @@ void VBlankIntrWait(void)
         sRestartRequested = false;
         LogF("stage: restart act (level %d)\n", (int)gCurrentLevel);
         SonAdv_RestartAct();
+    }
+    if (sSpecialRequested >= 0) {
+        LogF("stage: special stage %d (from level %d)\n", sSpecialRequested + 1, (int)gCurrentLevel);
+        SonAdv_EnterSpecialStage(sSpecialRequested);
+        sSpecialRequested = -1;
     }
 
     VDraw();

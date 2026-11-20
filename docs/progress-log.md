@@ -2,6 +2,12 @@
 
 Newest first.
 
+## 2026-11-20: switch-test14 built (special stages from the port menu)
+
+- switch-test12/13: Boss 1's hammer arm. 0020 records each sprite's full y (above the top edge vs near the bottom) per OAM slot, since 8-bit OAM y is ambiguous on 240 lines. The real cause of the arm in the top-left corner was the decomp's placeholder UnusedTransform (called TransformSprite, ignoring gSpriteTransformX/Y); 0021 is a native version from the ARM. Mark: Boss 1 now looks and plays right.
+- Port menu: Special stage page, stages 1 to 7, shown during a single-player act (0022). Same steps as the special spring; gCurrentLevel set to the zone's first act (game table: levels 0, 2, 4, 6, 7, 8, 10), checkpoint and return point at that act's spawn, so afterwards play continues at the start of that act. Emeralds won count in the save (Mark); a stage can be replayed, an emerald already held is not given twice (the game's own check).
+- Found with an AddressSanitizer host build: the special stage's message task ("COOL!", "AAARGH!", "Not enough rings") was allocated with the GBA size 0x74, smaller than the 64-bit struct, and overwrote the heap; leaving a special stage then crashed (malloc abort). Same pattern in the options and player data menus (0x344, 0x11C). All three now use sizeof (0023). With the fix a special stage runs to its results and returns to the act with no memory errors. One harmless read past the timer digit graphics remains.
+
 ## 2026-11-19: switch-test10 built (instant replay)
 
 - switch-test9 fix: The Moon's camera lower bound (pxHeight - 200) was past its upper bound for the 240-line picture, and the two clamps in camera.c alternated between them every frame (sprites 40 lines up, then down). Camera ranges smaller than the picture now settle the same way every frame (0018).

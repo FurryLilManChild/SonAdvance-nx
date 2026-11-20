@@ -1,0 +1,24 @@
+--- a/src/game/sa1/special_stage/main.c
++++ b/src/game/sa1/special_stage/main.c
+@@ -2513,7 +2513,9 @@
+                     sp3C[0] = s->frameFlags & 0x1F;
+                     if (gUnknown_030057E0[sp3C[0]] == 0) {
+                         gUnknown_030057E0[sp3C[0]] = -1;
+-                        temp_r5_2 = (u16 *)(&gOamBuffer[sp3C[0] * 4]);
++                        // SonAdvance-nx: the ROM writes to gOamBuffer+6, the affine
++                        // parameter; the decomp pointed at attr0 instead.
++                        temp_r5_2 = &gOamBuffer[sp3C[0] * 4].all.affineParam;
+                         temp_r5_2[0 * OAM_DATA_COUNT_AFFINE] = Div(0x10000, strc40->tf.qScaleX);
+                         temp_r5_2[1 * OAM_DATA_COUNT_AFFINE] = 0;
+                         temp_r5_2[2 * OAM_DATA_COUNT_AFFINE] = 0;
+@@ -2530,7 +2532,9 @@
+                     sp3C[0] = s->frameFlags & 0x1F;
+                     if (gUnknown_030057E0[sp3C[0]] == 0) {
+                         gUnknown_030057E0[sp3C[0]] = -1;
+-                        temp_r5_2 = (u16 *)(&gOamBuffer[sp3C[0] * 4]);
++                        // SonAdvance-nx: the ROM writes to gOamBuffer+6, the affine
++                        // parameter; the decomp pointed at attr0 instead.
++                        temp_r5_2 = &gOamBuffer[sp3C[0] * 4].all.affineParam;
+                         temp_r5_2[0 * OAM_DATA_COUNT_AFFINE] = Div(0x10000, strc40->tf.qScaleX);
+                         temp_r5_2[1 * OAM_DATA_COUNT_AFFINE] = 0;
+                         temp_r5_2[2 * OAM_DATA_COUNT_AFFINE] = 0;

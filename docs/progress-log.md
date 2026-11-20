@@ -4,6 +4,8 @@ Newest first.
 
 ## 2026-11-20: special stage visuals diagnosed (no Switch build yet)
 
+- switch-test15/16 (16 adds the NRO icon from assets/icon.*): Mark confirms the pipe and banner fixed, but the rings were drawn as yellow streaks. Decomp error in the NONMATCH UpdateObjectsAndRender: the ring scale matrix is written at &gOamBuffer[n * 4] (attr0 of each OAM entry) where the ROM writes gOamBuffer+6 (the affine parameter). The matrix stayed stale and the writes clobbered other sprites' attributes. 0026 points it at affineParam; the harness now draws round rings.
+
 - Mark's switch-test14 replays: the half-pipe drawn as scattered pieces with tile garbage over most of the screen, and the "GET 60 RINGS" banner garbled.
 - Half-pipe: BG2 is a 512x256 map built from four 19x14-tile quarters of tilemap 55. Their VRAM addresses (0xC01A, 0xC39A, 0xC800, 0xCB80) assume the GBA layout of two 32-column screen blocks side by side, but the portable renderer and DrawBackground keep a 512-wide map as one map 64 tiles wide, so three quarters landed in the wrong place. 0024 computes the same tile positions for the 64-wide layout (PIPE_MAP).
 - Banner: decomp typo in the NONMATCH sub_805BC94 (game_2_0.c). For a two-digit ring target it loads the first digit with 0xE00 bytes instead of 0x40 (the ROM's assembly has 0x40), copying 3.5 KB of unrelated UI graphics over the "RINGS" text. Found by tracing the graphics queue in the host harness. 0025 fixes the size. Three-digit and one-digit targets were not affected.

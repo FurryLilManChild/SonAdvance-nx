@@ -1,0 +1,102 @@
+--- a/src/sprite.c
++++ b/src/sprite.c
+@@ -522,12 +522,99 @@
+ 
+ // (0.00%)
+ // Not actually unused (SA1 Boss 1 calls it)
++#if PORTABLE
++// SonAdvance-nx: native version written from the ARM in
++// asm/non_matching/engine/UnusedTransform.inc. The decomp's placeholder called
++// TransformSprite, which ignores gSpriteTransformX/Y and the shared rotation,
++// so Boss 1's hammer arm was drawn at the top-left corner of the screen.
++// It is sub_8004E14 without the gSpriteTransformScaleUnknown factor: the
++// outer rotation matrix is just the shared rotation scaled by
++// gSpriteTransformScaleX/Y.
++void UnusedTransform(Sprite *sprite, SpriteTransform *transform)
++{
++    UnkSpriteStruct us;
++    const SpriteOffset *sprDims;
++    u16 *affine;
++    s32 posX, posY;
++    u16 width, height, halfWidth, halfHeight;
++    s16 offsetX, offsetY;
++    s32 x, y;
++
++    if (sprite->dimensions == (void *)-1)
++        return;
++    sprDims = sprite->dimensions;
++    if (sprDims == NULL)
++        return;
++
++    us.affineIndex = sprite->frameFlags & SPRITE_FLAG_MASK_ROT_SCALE;
++    affine = (u16 *)&gOamBuffer[us.affineIndex * 4].all.affineParam;
++
++    us.qDirX = COS_24_8((transform->rotation + gSpriteTransformRotation) & ONE_CYCLE);
++    us.qDirY = SIN_24_8((transform->rotation + gSpriteTransformRotation) & ONE_CYCLE);
++    us.unkC[0] = I(transform->qScaleX * gSpriteTransformScaleX);
++    us.unkC[1] = I(transform->qScaleY * gSpriteTransformScaleY);
++
++    affine[0 * OAM_DATA_COUNT_AFFINE] = I(Div(Q(256), us.unkC[0]) * us.qDirX);
++    affine[1 * OAM_DATA_COUNT_AFFINE] = I(Div(Q(256), us.unkC[0]) * us.qDirY);
++    affine[2 * OAM_DATA_COUNT_AFFINE] = I(Div(Q(256), us.unkC[1]) * -us.qDirY);
++    affine[3 * OAM_DATA_COUNT_AFFINE] = I(Div(Q(256), us.unkC[1]) * us.qDirX);
++
++    if (transform->qScaleX < 0) {
++        us.unkC[0] = I(-transform->qScaleX * gSpriteTransformScaleX);
++    }
++    if (transform->qScaleY < 0) {
++        us.unkC[1] = I(-transform->qScaleY * gSpriteTransformScaleY);
++    }
++
++    us.unk0[0] = I(+us.qDirX * us.unkC[0]);
++    us.unk0[1] = I(-us.qDirY * us.unkC[0]);
++    us.unk0[2] = I(+us.qDirY * us.unkC[1]);
++    us.unk0[3] = I(+us.qDirX * us.unkC[1]);
++
++    us.unk18[0][0] = (s16)((COS_24_8(gSpriteTransformRotation) * gSpriteTransformScaleX) >> 8);
++    us.unk18[0][1] = (s16)((-SIN_24_8(gSpriteTransformRotation) * gSpriteTransformScaleX) >> 8);
++    us.unk18[1][0] = (s16)((SIN_24_8(gSpriteTransformRotation) * gSpriteTransformScaleY) >> 8);
++    us.unk18[1][1] = (s16)((COS_24_8(gSpriteTransformRotation) * gSpriteTransformScaleY) >> 8);
++
++    posX = (transform->x * us.unk18[0][0] + transform->y * us.unk18[0][1] + Q(gSpriteTransformX)) >> 8;
++    posY = (transform->x * us.unk18[1][0] + transform->y * us.unk18[1][1] + Q(gSpriteTransformY)) >> 8;
++
++    if (transform->qScaleX > 0) {
++        offsetX = sprDims->offsetX;
++        width = sprDims->width;
++    } else {
++        offsetX = sprDims->width - sprDims->offsetX;
++        width = sprDims->width;
++    }
++    if (transform->qScaleY > 0) {
++        offsetY = sprDims->offsetY;
++        height = sprDims->height;
++    } else {
++        offsetY = sprDims->height - sprDims->offsetY;
++        height = sprDims->height;
++    }
++
++    halfWidth = width / 2;
++    offsetX -= halfWidth;
++    halfHeight = height / 2;
++    offsetY -= halfHeight;
++
++    x = offsetX * us.unk0[0] + offsetY * us.unk0[1] + Q(halfWidth);
++    posX -= x >> 8;
++    y = offsetX * us.unk0[2] + offsetY * us.unk0[3] + Q(halfHeight);
++    posY -= y >> 8;
++
++    sprite->x = posX;
++    sprite->y = posY;
++}
++#else
+ NONMATCH("asm/non_matching/engine/UnusedTransform.inc", void UnusedTransform(Sprite *sprite, SpriteTransform *transform))
+ {
+     // TEMP
+     TransformSprite(sprite, transform);
+ }
+ END_NONMATCH
++#endif
+ 
+ // VERY similar to TransformSprite and UnusedTransform
+ // (41.14%) https://decomp.me/scratch/n3NXz

@@ -17,6 +17,7 @@
  *   HIT_AT=frame  hit the player once (Coll_DamagePlayer). KILL_AT=frame: lose a life.
  *   CHARSEL_AT=frame  open the character select (single player).
  *   COURSE_AT=frame  open the course select (single player, character CHAR).
+ *   WARP_AT=frame WARPX=x WARPY=y  move the player (world pixels).
  *   STATUS=1      print rings, lives and level every 60 frames.
  *   LEVEL=n LEVEL_AT=frame CHAR=c   jump straight into level n (0..13) at that
  *                 frame as character c (0 Sonic, 1 Tails, 2 Knuckles, 3 Amy).
@@ -263,8 +264,13 @@ void Harness_Frame(void)
         gPlayer.moveState |= MOVESTATE_DEAD;
         fprintf(stderr, "harness: player dead at frame %u\n", sFrame);
     }
+    if (getenv("WARP_AT") && (int)sFrame == atoi(getenv("WARP_AT"))) {
+        gPlayer.qWorldX = Q(atoi(getenv("WARPX")));
+        gPlayer.qWorldY = Q(atoi(getenv("WARPY")));
+        fprintf(stderr, "harness: warp to %s,%s at frame %u\n", getenv("WARPX"), getenv("WARPY"), sFrame);
+    }
     if (sStatus && (sFrame % 60) == 0)
-        fprintf(stderr, "status f%u: level %d rings %u lives %u time %u stage %d\n", sFrame, (int)gCurrentLevel,
+        fprintf(stderr, "status f%u: x %d y %d level %d rings %u lives %u time %u stage %d\n", sFrame, (int)I(gPlayer.qWorldX), (int)I(gPlayer.qWorldY), (int)gCurrentLevel,
                 (unsigned)gRingCount, (unsigned)gNumLives, (unsigned)gCourseTime, gGameStageTask != NULL);
     if ((int)sFrame == sResultsAt) {
         extern u16 CreateStageResults(u32 courseTime, u16 ringCount, u8 spRingCount);

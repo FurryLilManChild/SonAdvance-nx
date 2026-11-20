@@ -1,0 +1,142 @@
+--- a/src/sprite.c
++++ b/src/sprite.c
+@@ -8,6 +8,20 @@
+ 
+ #include "platform/platform.h"
+ 
++#if WIDESCREEN_HACK && !EXTENDED_OAM
++// SonAdvance-nx: the original 8-bit OAM y cannot tell a sprite partly above
++// the top of the 240-line picture (y -32 stored as 224) from one near its
++// bottom (y 224). Where the game knows the full y it records the answer:
++// 1 = y as stored, 2 = stored y minus 256. 0 = unknown (the renderer's old
++// rule). The value rides in the free bits of the OAM entry's 4th halfword
++// while in gOamMallocBuffer and lands here, by OAM slot, in ProcessOamBuffers.
++u8 gSonAdvOamYWrap[OAM_ENTRY_COUNT];
++#define SONADV_OAM_Y_WRAP(fullY) ((((fullY) < 0) || ((fullY) >= 256)) ? 2 : 1)
++#define SONADV_SET_OAM_Y_WRAP(oam, fullY) ((oam)->split.integer = SONADV_OAM_Y_WRAP(fullY))
++#else
++#define SONADV_SET_OAM_Y_WRAP(oam, fullY)
++#endif
++
+ #if !PLATFORM_GBA && (RENDERER != RENDERER_SOFTWARE)
+ extern void Platform_DisplaySprite(Sprite *sprite, u8 oamPaletteNum);
+ extern void Platform_TransformSprite(Sprite *sprite, SpriteTransform *transform);
+@@ -800,6 +814,7 @@
+                 oam->all.attr0 |= (sprite->frameFlags & SPRITE_FLAG_MASK_OBJ_MODE) * 8;
+                 oam->all.attr2 |= (sprite->frameFlags & SPRITE_FLAG_MASK_PRIORITY) >> 2;
+                 oam->all.attr0 += ((y + sprY) & 0xFF);
++                SONADV_SET_OAM_Y_WRAP(oam, y + sprY);
+                 oam->all.attr1 += ((x + sprX) & 0x1FF);
+ 
+                 if (oam->all.attr0 & (ST_OAM_8BPP << 13)) {
+@@ -919,6 +934,7 @@
+                 oam->all.attr0 |= (sprite->frameFlags & SPRITE_FLAG_MASK_OBJ_MODE) * 8;
+                 oam->all.attr2 |= (sprite->frameFlags & SPRITE_FLAG_MASK_PRIORITY) >> 2;
+                 oam->all.attr0 += ((y + y1) & 0xFF);
++                SONADV_SET_OAM_Y_WRAP(oam, y + y1);
+                 oam->all.attr1 += ((x + x1) & 0x1FF);
+ 
+                 if (oam->all.attr0 & (ST_OAM_8BPP << 13)) {
+@@ -935,6 +951,7 @@
+                     r5->all.attr1 &= 0xFE00;
+                     r5->all.attr0 &= 0xFF00;
+                     r5->all.attr0 += (positions[i].y + centerOffsetY + y1) & 0xFF;
++                    SONADV_SET_OAM_Y_WRAP(r5, positions[i].y + centerOffsetY + y1);
+                     r5->all.attr1 += (positions[i].x + centerOffsetX + x1) & 0x1FF;
+                 }
+             }
+@@ -978,6 +995,9 @@
+         gOamMallocOrders_EndIndex[order] = gOamFreeIndex;
+     }
+ 
++#if WIDESCREEN_HACK && !EXTENDED_OAM
++    gOamMallocBuffer[gOamFreeIndex].split.integer = 0; // SonAdvance-nx: y wrap unknown until set
++#endif
+     gOamFreeIndex++;
+     return &gOamMallocBuffer[gOamFreeIndex - 1];
+ }
+@@ -994,6 +1014,9 @@
+         while (oamMallocIndex != -1) {
+             u8 *debugCopyOrders = gOamMallocCopiedOrder;
+             DmaCopy16(3, &gOamMallocBuffer[oamMallocIndex], dstOam, sizeof(OamDataShort));
++#if WIDESCREEN_HACK && !EXTENDED_OAM
++            gSonAdvOamYWrap[dstOam - gOamBuffer] = gOamMallocBuffer[oamMallocIndex].split.integer;
++#endif
+             dstOam++;
+ 
+             debugCopyOrders += oamMallocIndex;
+@@ -1007,6 +1030,9 @@
+         dstOam = &gOamBuffer[layer];
+ 
+         while (layer < gOamFirstPausedIndex) {
++#if WIDESCREEN_HACK && !EXTENDED_OAM
++            gSonAdvOamYWrap[layer] = 0;
++#endif
+             DmaFill16(3, 0x200, dstOam, sizeof(OamDataShort));
+             dstOam++;
+             layer++;
+@@ -1021,6 +1047,9 @@
+         for (k = l = 0; layer >= 0;) {
+             s32 size = sizeof(OamDataShort);
+             DmaCopy16(3, dstOam - k, &gOamBuffer[OAM_ENTRY_COUNT - 1 - l], size);
++#if WIDESCREEN_HACK && !EXTENDED_OAM
++            gSonAdvOamYWrap[OAM_ENTRY_COUNT - 1 - l] = gSonAdvOamYWrap[(dstOam - k) - gOamBuffer];
++#endif
+             k++, layer--, l++;
+         }
+ 
+@@ -1029,6 +1058,9 @@
+         gOamFirstPausedIndex = OAM_ENTRY_COUNT - gOamFreeIndex;
+ 
+         for (layer = 0; layer < gOamFirstPausedIndex; layer++) {
++#if WIDESCREEN_HACK && !EXTENDED_OAM
++            gSonAdvOamYWrap[layer] = 0;
++#endif
+             DmaFill16(3, 0x200, &gOamBuffer[layer], sizeof(OamDataShort));
+ #ifndef NON_MATCHING
+             // unlike when using --, using ++ changes the condition to something entirely
+--- a/src/platform/shared/video/gpsp_renderer.cc
++++ b/src/platform/shared/video/gpsp_renderer.cc
+@@ -60,6 +60,20 @@
+ #define REG_ADDR_BGxCNT(n)  (REG_ADDR_BG0CNT + (n) * sizeof(u16))
+ #define REG_ADDR_WINxH(n)   (REG_ADDR_WIN0H + (n) * sizeof(winreg_t))
+ #define REG_ADDR_WINxV(n)   (REG_ADDR_WIN0V + (n) * sizeof(winreg_t))
++
++#if WIDESCREEN_HACK && !EXTENDED_OAM
++// SonAdvance-nx: see gSonAdvOamYWrap in sprite.c.
++extern "C" u8 gSonAdvOamYWrap[128];
++static inline s32 sonadv_obj_y(u32 slot, s32 y)
++{
++    u8 w = gSonAdvOamYWrap[slot];
++    if (w == 1)
++        return y;
++    if (w == 2)
++        return y - 256;
++    return (y > DISPLAY_HEIGHT) ? y - 256 : y;
++}
++#endif
+ #define REG_ADDR_BGxHOFS(n) (REG_ADDR_BG0HOFS + ((n)*2) * sizeof(u16))
+ #define REG_ADDR_BGxVOFS(n) (REG_ADDR_BG0VOFS + ((n)*2) * sizeof(u16))
+ #define REG_ADDR_BGxPA(n)   (REG_ADDR_BG2PA + ((n)-2) * 8 * sizeof(u16))
+@@ -1526,7 +1540,9 @@
+ 
+         // ST-OBJs force 1st target bit (forced blending)
+         bool forcebld = is_trans && rdtype != FULLCOLOR;
+-#if !EXTENDED_OAM
++#if !EXTENDED_OAM && WIDESCREEN_HACK
++        obji.obj_y = sonadv_obj_y(objoff, obji.obj_y);
++#elif !EXTENDED_OAM
+         if (obji.obj_y > DISPLAY_HEIGHT)
+             obji.obj_y -= 256;
+ #endif
+@@ -1612,7 +1628,9 @@
+         s32 obj_width = obj_dim_table[obj_shape][obj_size][0];
+         s32 obj_y = oam_data->split.y;
+ 
+-#if !EXTENDED_OAM
++#if !EXTENDED_OAM && WIDESCREEN_HACK
++        obj_y = sonadv_obj_y(obj_num, obj_y);
++#elif !EXTENDED_OAM
+         if (obj_y > DISPLAY_HEIGHT)
+             obj_y -= 256;
+ #endif

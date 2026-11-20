@@ -1,0 +1,57 @@
+--- a/src/bg_triangles.c
++++ b/src/bg_triangles.c
+@@ -296,7 +296,14 @@
+     s16 sp8[2];
+     s16 spC[2] = { 0 };
+     s16 sp10[2] = { 0 };
++#if WIDESCREEN_HACK
++    // SonAdvance-nx: the edge x positions reach 425 on the widescreen
++    // picture; as u8 they wrapped past 255 (The Moon: the boss's laser
++    // window drew garbage bands across the screen).
++    int_vcount sp14[2];
++#else
+     u8 sp14[2];
++#endif
+     s16 maxVal2;
+     s32 var_r0_5;
+     u8 var_r0_6;
+--- a/src/game/sa1/stage/enemies/boss_xtra_super_egg_robot.c
++++ b/src/game/sa1/stage/enemies/boss_xtra_super_egg_robot.c
+@@ -1402,7 +1402,9 @@
+         var_r3 = CLAMP_32(var_r8, 0, (DISPLAY_HEIGHT - 1));
+ 
+         gDispCnt |= 0x2000;
+-        gWinRegs[2] = (var_r4_2 << 8) | var_r3;
++        // SonAdvance-nx: WIN_RANGE packs the range the way the widescreen
++        // window registers hold it (16 bits each); "<< 8" left the top at 0.
++        gWinRegs[2] = WIN_RANGE(var_r4_2, var_r3);
+         gWinRegs[5] = 0x1F1F;
+         gWinRegs[4] = 0x3F3F;
+         gBldRegs.bldCnt = 0x3FBF;
+--- a/src/game/sa1/stage/backgrounds/zone_7_act_2.inc.c
++++ b/src/game/sa1/stage/backgrounds/zone_7_act_2.inc.c
+@@ -24,6 +24,12 @@
+     DrawBackground(bg);
+ 
+     offsets = gBgOffsetsHBlankPrimary;
++#if WIDESCREEN_HACK
++    // SonAdvance-nx: the per-line window of the boss's laser takes 4 bytes a
++    // line in widescreen (2 on the GBA) and so filled the first half of this
++    // buffer, over this table; the table lives in the second half instead.
++    offsets += DISPLAY_HEIGHT;
++#endif
+     offsets += 90; // Earth is static, so skip those lines
+ 
+     DmaFill32(3, (gStageTime >> 6) & 0xFF, offsets, 10 * sizeof(u32));
+--- a/src/game/shared/stage/camera.c
++++ b/src/game/shared/stage/camera.c
+@@ -1142,6 +1142,9 @@
+ 
+     if ((newLine >= 0) && (line != DISPLAY_HEIGHT - 1)) {
+         u32 *ptr = gBgOffsetsHBlankSecondary;
++#if WIDESCREEN_HACK && (GAME == GAME_SA1)
++        ptr += DISPLAY_HEIGHT; // SonAdvance-nx: see zone_7_act_2.inc.c
++#endif
+         ptr += 90;
+ 
+         *(vu32 *)&REG_BG1HOFS = ptr[newLine];

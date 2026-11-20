@@ -2,6 +2,11 @@
 
 Newest first.
 
+## 2026-11-19: switch-test10 built (instant replay)
+
+- switch-test9 fix: The Moon's camera lower bound (pxHeight - 200) was past its upper bound for the 240-line picture, and the two clamps in camera.c alternated between them every frame (sprites 40 lines up, then down). Camera ranges smaller than the picture now settle the same way every frame (0018).
+- Mark asked for the Sonic Rush style replay: left stick click saves the last 2 seconds (120 frames: drawn picture, OAM, I/O registers, palette, camera) to logs/replay_NNN_fFRAME.bin, at most 10 per session; tools/replay/replay.py turns one into PNGs plus a per-frame sprite list. Right stick click still saves a single BMP.
+
 ## 2026-11-13: switch-test6 built (replaces switch-test5, not yet tested)
 
 - Super Sonic removed again before testing (Mark): a recolored Sonic with the invincibility effect is not what he wants, and a flying mode would need new code; leave it out. Lesson: ask before building a substitute for something Mark asked for.

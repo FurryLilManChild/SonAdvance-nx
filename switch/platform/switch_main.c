@@ -32,6 +32,7 @@
 #include "platform/shared/dma.h"
 #include "platform/shared/video/gpsp_renderer.h"
 #include "game/shared/stage/stage.h"
+#include "game/shared/stage/camera.h"
 #include "sonadv_port.h"
 
 #if ENABLE_AUDIO
@@ -738,6 +739,92 @@ static void CaptureFrame(u64 frame)
 }
 
 /* ------------------------------------------------------------------------ */
+/* Instant replay: left stick click saves the last 2 seconds for debugging  */
+/* ------------------------------------------------------------------------ */
+/* Every frame the drawn game picture, OAM, I/O registers, palette and the
+ * camera go into a ring of the last 120 frames (about 25 MB, allocated once).
+ * Left stick click writes the ring, oldest frame first, to
+ * logs/replay_NNN_fFRAME.bin; the game waits while it saves (a few seconds).
+ * tools/replay/replay.py turns a file into PNGs. */
+
+#define REPLAY_FRAMES 120
+#define REPLAY_MAX_SAVES 10
+
+typedef struct {
+    u64 frame;
+    u8 classic;
+    u8 level;
+    u8 character;
+    u8 inStage;
+    s32 camX, camY;
+    u16 image[DISPLAY_WIDTH * DISPLAY_HEIGHT];
+    u8 oam[OAM_SIZE];
+    u8 io[IO_SIZE];
+    u16 pltt[PLTT_SIZE / 2];
+} ReplayFrame;
+
+static ReplayFrame *sReplay;
+static u32 sReplayNext, sReplayCount, sReplaySaves;
+
+static void ReplayInit(void)
+{
+    sReplay = (ReplayFrame *)malloc(sizeof(ReplayFrame) * REPLAY_FRAMES);
+    LogF("replay: %s (%u frames, %u KB)\n", sReplay ? "ready, left stick click saves" : "no memory, off", REPLAY_FRAMES,
+         (unsigned)(sizeof(ReplayFrame) * REPLAY_FRAMES / 1024));
+}
+
+static void ReplayRecord(u64 frame)
+{
+    if (sReplay == NULL)
+        return;
+    ReplayFrame *r = &sReplay[sReplayNext];
+    r->frame = frame;
+    r->classic = gGameStageTask == NULL;
+    r->level = (u8)gCurrentLevel;
+    r->character = (u8)gSelectedCharacter;
+    r->inStage = gGameStageTask != NULL;
+    r->camX = gCamera.x;
+    r->camY = gCamera.y;
+    memcpy(r->image, sGameImage, sizeof(r->image));
+    memcpy(r->oam, OAM, sizeof(r->oam));
+    memcpy(r->io, REG_BASE, sizeof(r->io));
+    memcpy(r->pltt, PLTT, sizeof(r->pltt));
+    sReplayNext = (sReplayNext + 1) % REPLAY_FRAMES;
+    if (sReplayCount < REPLAY_FRAMES)
+        sReplayCount++;
+}
+
+static void ReplaySave(u64 frame)
+{
+    if (sReplay == NULL || sReplayCount == 0)
+        return;
+    if (sReplaySaves >= REPLAY_MAX_SAVES) {
+        LogF("replay: limit of %u per session reached\n", REPLAY_MAX_SAVES);
+        return;
+    }
+    char path[128];
+    snprintf(path, sizeof(path), LOG_DIR "/replay_%03u_f%llu.bin", ++sReplaySaves, (unsigned long long)frame);
+    u64 t0 = armGetSystemTick();
+    FILE *f = fopen(path, "wb");
+    if (f == NULL) {
+        LogF("replay: cannot open %s (errno %d)\n", path, errno);
+        return;
+    }
+    struct {
+        char magic[8];
+        u32 version, frames, frameBytes, width, height, oamSize, ioSize, plttSize;
+    } hdr = { { 'S', 'A', 'N', 'X', 'R', 'P', 'L', '1' }, 1, sReplayCount, (u32)sizeof(ReplayFrame), DISPLAY_WIDTH,
+              DISPLAY_HEIGHT, OAM_SIZE, IO_SIZE, PLTT_SIZE };
+    bool ok = fwrite(&hdr, sizeof(hdr), 1, f) == 1;
+    u32 first = (sReplayNext + REPLAY_FRAMES - sReplayCount) % REPLAY_FRAMES;
+    for (u32 i = 0; i < sReplayCount && ok; i++)
+        ok = fwrite(&sReplay[(first + i) % REPLAY_FRAMES], sizeof(ReplayFrame), 1, f) == 1;
+    fclose(f);
+    LogF("replay: %s %s, %u frames, %llu ms\n", ok ? "saved" : "FAILED writing", path, sReplayCount,
+         (unsigned long long)(armTicksToNs(armGetSystemTick() - t0) / 1000000ULL));
+}
+
+/* ------------------------------------------------------------------------ */
 /* Port menu (Minus + Plus): drawn into the game picture with libnx's font  */
 /* ------------------------------------------------------------------------ */
 
@@ -1124,8 +1211,11 @@ void VBlankIntrWait(void)
     }
 
     VDraw();
+    ReplayRecord(sFrames);
     if (sButtonsDown & HidNpadButton_StickR)
         CaptureFrame(sFrames);
+    if (sButtonsDown & HidNpadButton_StickL)
+        ReplaySave(sFrames);
     GfxPresent();
 
     REG_KEYINPUT = KEYS_MASK ^ ReadController();
@@ -1174,6 +1264,7 @@ int main(int argc, char **argv)
 
     ReadSaveFile();
     LoadSettings();
+    ReplayInit();
 
     /* Keep the original multiplayer screen from claiming the display. */
     REG_RCNT = 0x8000;

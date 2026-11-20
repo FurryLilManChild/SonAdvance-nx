@@ -61,8 +61,17 @@ done
 # 4. NRO with devkitA64.
 make -C "$BUILD/libagbsyscall" PLATFORM=switch CPU_ARCH=arm64 > "$ROOT/build/libagbsyscall.log" 2>&1 \
     || { tail -20 "$ROOT/build/libagbsyscall.log"; exit 1; }
+# Homebrew menu icon: assets/icon.* (Mark's own image, not in git), made a
+# 256x256 JPEG. No icon file means the NRO gets the default icon.
+ICON_ARG=()
+ICON_SRC="$(ls "$ROOT"/assets/icon.* 2>/dev/null | head -1 || true)"
+if [[ -n "$ICON_SRC" ]]; then
+    convert "$ICON_SRC" -resize 256x256^ -gravity center -extent 256x256 -quality 92 "$ROOT/build/icon.jpg"
+    ICON_ARG=(SWITCH_ICON="$ROOT/build/icon.jpg")
+    echo "[build] icon: $ICON_SRC"
+fi
 make -C "$BUILD" switch GAME_NAME=sa1 -j"$(nproc)" \
-    SONADV_GEN_DIR="$GEN" SONADV_BUILD_ID="$BUILD_ID" SONADV_VERSION="$VERSION" \
+    SONADV_GEN_DIR="$GEN" SONADV_BUILD_ID="$BUILD_ID" SONADV_VERSION="$VERSION" "${ICON_ARG[@]}" \
     > "$ROOT/build/nro.log" 2>&1 || { grep -n -E "error|Error" "$ROOT/build/nro.log" | head -30; exit 1; }
 
 # 5. Checks before anything goes to Mark.

@@ -22,6 +22,7 @@
 
 #include <switch.h>
 #include "romfill.h"
+#include "sonadv_release.h" /* SONADV_RELEASE, from build.sh */
 #include <deko3d.h>
 
 #define SDL_MAIN_HANDLED
@@ -1237,11 +1238,14 @@ void VBlankIntrWait(void)
     }
 
     VDraw();
+#if !SONADV_RELEASE
+    /* Test builds only: right stick saves a screenshot, left stick the last 2 s. */
     ReplayRecord(sFrames);
     if (sButtonsDown & HidNpadButton_StickR)
         CaptureFrame(sFrames);
     if (sButtonsDown & HidNpadButton_StickL)
         ReplaySave(sFrames);
+#endif
     GfxPresent();
 
     REG_KEYINPUT = KEYS_MASK ^ ReadController();
@@ -1310,7 +1314,11 @@ int main(int argc, char **argv)
 
     ReadSaveFile();
     LoadSettings();
+#if !SONADV_RELEASE
     ReplayInit();
+#else
+    LogF("release build: stick-click capture off\n");
+#endif
 
     /* Keep the original multiplayer screen from claiming the display. */
     REG_RCNT = 0x8000;

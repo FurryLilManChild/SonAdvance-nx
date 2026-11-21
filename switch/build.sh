@@ -7,7 +7,9 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 LABEL="${1:-dev}"
-VERSION="0.1.0"
+VERSION="${SONADV_VERSION:-0.1.0}"
+# SONADV_RELEASE=1: release build (no stick-click screenshot or replay capture).
+RELEASE="${SONADV_RELEASE:-0}"
 export DEVKITPRO="${DEVKITPRO:-/opt/devkitpro}"
 BUILD="$ROOT/build/sa2"
 GEN="$ROOT/build/gen"
@@ -28,6 +30,9 @@ echo "[build] $BUILD_ID"
 
 # 1. Fresh tree: pinned upstream plus our patches and platform layer.
 mkdir -p "$BUILD" "$GEN"
+printf '#pragma once\n#define SONADV_RELEASE %s\n' "$RELEASE" > "$GEN/sonadv_release.h.new"
+cmp -s "$GEN/sonadv_release.h.new" "$GEN/sonadv_release.h" || mv "$GEN/sonadv_release.h.new" "$GEN/sonadv_release.h"
+rm -f "$GEN/sonadv_release.h.new"
 # No --delete: generated artifacts stay between builds; tracked sources are
 # refreshed to pristine upstream, then patched again below.
 rsync -a --checksum "$ROOT/upstream/sa2/" "$BUILD/" --exclude .git --exclude build
@@ -77,7 +82,7 @@ fi
 # Linker script with the game's constant data in a writable section, so it
 # can be filled from the player's ROM at startup. Always relink.
 python3 "$ROOT/switch/tools/gen_linker.py" "$DEVKITPRO/libnx/switch.ld" "$DEVKITPRO/libnx/switch.specs" "$ROOT/build/link"
-rm -f "$BUILD/sa1_nx.elf" "$BUILD/sa1_nx.nro"
+rm -f "$BUILD/sa1_nx.elf" "$BUILD/sa1_nx.nro" "$BUILD"/*.nacp   # nacp carries the version; make never remakes it on its own
 make -C "$BUILD" switch GAME_NAME=sa1 -j"$(nproc)" SONADV_SPECS="$ROOT/build/link/sonadv.specs" \
     SONADV_GEN_DIR="$GEN" SONADV_BUILD_ID="$BUILD_ID" SONADV_VERSION="$VERSION" "${ICON_ARG[@]}" \
     > "$ROOT/build/nro.log" 2>&1 || { grep -n -E "error|Error" "$ROOT/build/nro.log" | head -30; exit 1; }

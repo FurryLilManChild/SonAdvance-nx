@@ -2,6 +2,12 @@
 
 Newest first.
 
+## 2026-11-21: 0.5.0 packaged
+
+- switch-test20 (CRC over the filled bytes only): Mark's USA dump identified, 7,522,052 bytes filled from it plus the 1,968-byte patch, crc ok; act and special stage 3 at 60 fps.
+- Release build (commit 4cbe595, SONADV_VERSION=0.5.0 SONADV_RELEASE=1): NACP version 0.5.0, Mark's icon, stick-click screenshot and replay off; romfill proof, romscan and simfill pass. NRO sha256 a34c5cd7...7887.
+- SonAdvance-nx-0.5.0-switch.zip (RELEASE_NOTES.md, switch/SonAdvance-nx/ with the NRO and PUT_YOUR_ROM_HERE.txt), sha256 ed0e3ccb...98cb, in C:\SonAdvance-nx\out\release\0.5.0\ with RELEASE_NOTES.md. Mark publishes.
+
 ## 2026-11-21: no game data in the NRO (both ROMs)
 
 - Mark caught that the release NRO carried the game data (decomp assets and baserom incbins compiled in, about 7.7 MB). Rule from now on: every port is set up from its first build to ship without game data.

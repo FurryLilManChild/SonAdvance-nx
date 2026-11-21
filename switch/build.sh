@@ -15,6 +15,10 @@ ROM="${SONADV_ROM_EU:-$ROOT/assets/eu.gba}"
 
 [[ -f "$ROM" ]] || { echo "missing Europe ROM at $ROM"; exit 1; }
 echo "eb00f101af23d728075ac2117e27ecd8a4b4c3e9  $ROM" | sha1sum -c --quiet
+# The USA dump is only used to build the USA half of the fill table.
+ROM_US="${SONADV_ROM_US:-$ROOT/assets/us.gba}"
+[[ -f "$ROM_US" ]] || { echo "missing USA ROM at $ROM_US"; exit 1; }
+echo "d842afa7dd1e84de08addb94a51506f1bcafd551  $ROM_US" | sha1sum -c --quiet
 
 COMMIT="$(git -C "$ROOT" rev-parse --short HEAD)"
 DIRTY="$(git -C "$ROOT" status --porcelain --untracked-files=no | grep -q . && echo "+dirty" || true)"
@@ -35,7 +39,7 @@ for p in "$ROOT"/switch/patches/*.patch; do
     (cd "$BUILD" && patch -p1 --forward --silent < "$p") || { echo "patch failed: $p"; exit 1; }
 done
 mkdir -p "$BUILD/src/platform/switch"
-cp "$ROOT"/switch/platform/*.c "$BUILD/src/platform/switch/"
+cp "$ROOT"/switch/platform/*.c "$ROOT"/switch/platform/*.h "$BUILD/src/platform/switch/"
 cp "$ROM" "$BUILD/baserom_sa1.gba"
 
 # 2. Host tools (native x86, need libpng which the devkitPro image lacks).
@@ -70,9 +74,30 @@ if [[ -n "$ICON_SRC" ]]; then
     ICON_ARG=(SWITCH_ICON="$ROOT/build/icon.jpg")
     echo "[build] icon: $ICON_SRC"
 fi
-make -C "$BUILD" switch GAME_NAME=sa1 -j"$(nproc)" \
+# Linker script with the game's constant data in a writable section, so it
+# can be filled from the player's ROM at startup. Always relink.
+python3 "$ROOT/switch/tools/gen_linker.py" "$DEVKITPRO/libnx/switch.ld" "$DEVKITPRO/libnx/switch.specs" "$ROOT/build/link"
+rm -f "$BUILD/sa1_nx.elf" "$BUILD/sa1_nx.nro"
+make -C "$BUILD" switch GAME_NAME=sa1 -j"$(nproc)" SONADV_SPECS="$ROOT/build/link/sonadv.specs" \
     SONADV_GEN_DIR="$GEN" SONADV_BUILD_ID="$BUILD_ID" SONADV_VERSION="$VERSION" "${ICON_ARG[@]}" \
     > "$ROOT/build/nro.log" 2>&1 || { grep -n -E "error|Error" "$ROOT/build/nro.log" | head -30; exit 1; }
+
+# 4b. Take the game data out: strip it from the ELF, write the fill table into
+# RomFS, and rebuild the NRO from the stripped ELF. romfill.py proves the fill
+# rebuilds the original data from each ROM before it writes anything.
+rm -rf "$ROOT/build/romfs" && mkdir -p "$ROOT/build/romfs"
+NM="$DEVKITPRO/devkitA64/bin/aarch64-none-elf-nm" python3 "$ROOT/switch/tools/romfill.py" \
+    "$BUILD/sa1_nx.elf" "$BUILD/sa1_nx.map" "$ROM" "$ROM_US" "$ROOT/build/sa1_nx.stripped.elf" \
+    "$ROOT/build/romfs" "$ROOT/build/romfill-report.txt"
+NACP_FILE="$(ls "$BUILD"/*.nacp | head -1)"
+ICON_NRO=()
+[[ -n "$ICON_SRC" ]] && ICON_NRO=(--icon="$ROOT/build/icon.jpg")
+"$DEVKITPRO/tools/bin/elf2nro" "$ROOT/build/sa1_nx.stripped.elf" "$BUILD/sa1_nx.nro" "${ICON_NRO[@]}" \
+    --nacp="$NACP_FILE" --romfsdir="$ROOT/build/romfs"
+# Release check: no game data left in the NRO.
+python3 "$ROOT/switch/tools/romscan.py" "$BUILD/sa1_nx.nro" "$ROM" "$ROM_US" "$ROOT/build/romfs/romfill.bin"
+# Startup fill simulated on the finished NRO with each ROM (same table offsets as romfill.c).
+python3 "$ROOT/switch/tools/simfill.py" "$BUILD/sa1_nx.nro" "$ROOT/build/romfs/romfill.bin" "$BUILD/sa1_nx.elf" "$ROM" "$ROM_US"
 
 # 5. Checks before anything goes to Mark.
 NRO="$BUILD/sa1_nx.nro"

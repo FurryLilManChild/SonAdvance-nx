@@ -21,6 +21,7 @@
 #include <unistd.h>
 
 #include <switch.h>
+#include "romfill.h"
 #include <deko3d.h>
 
 #define SDL_MAIN_HANDLED
@@ -1286,6 +1287,26 @@ int main(int argc, char **argv)
 
     padConfigureInput(1, HidNpadStyleSet_NpadStandard);
     padInitializeDefault(&sPad);
+
+    /* Game data comes from the player's own ROM; the NRO ships without it. */
+    {
+        static SonAdvRomInfo rom;
+        if (SonAdv_RomFill(&rom) != 0) {
+            LogF("rom: FAILED: %s\n", rom.error);
+            consoleInit(NULL);
+            printf("\n  Sonic Advance NX %s\n\n%s\n\n  Press + to exit.\n", SONADV_VERSION, rom.error);
+            consoleUpdate(NULL);
+            while (appletMainLoop()) {
+                padUpdate(&sPad);
+                if (padGetButtonsDown(&sPad) & HidNpadButton_Plus) break;
+                svcSleepThread(16000000);
+            }
+            consoleExit(NULL);
+            return 0;
+        }
+        LogF("rom: %s (%s), %zu bytes filled from the ROM, %zu from the USA patch, %zu skipped, crc %08x ok\n",
+             rom.romName, rom.region == 1 ? "Europe" : "USA", rom.copied, rom.literal, rom.skipped, rom.crc);
+    }
 
     ReadSaveFile();
     LoadSettings();

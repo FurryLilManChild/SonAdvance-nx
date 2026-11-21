@@ -1,0 +1,13 @@
+--- a/Makefile
++++ b/Makefile
+@@ -297,7 +297,9 @@
+ 			CPPFLAGS += -D SWITCH_LEGACY_OAM=1
+ 		endif
+ 		CC1FLAGS += -march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE -ffunction-sections
+-		LDFLAGS += -specs=$(DEVKITPRO)/libnx/switch.specs -fPIE
++		# SonAdvance-nx: build.sh passes its own specs (game data in a writable section).
++		SONADV_SPECS ?= $(DEVKITPRO)/libnx/switch.specs
++		LDFLAGS += -specs=$(SONADV_SPECS) -fPIE
+ 		LINKER := $(CXX)
+ 	endif
+ 

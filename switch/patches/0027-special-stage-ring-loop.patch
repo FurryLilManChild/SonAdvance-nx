@@ -1,0 +1,36 @@
+--- a/src/game/sa1/special_stage/main.c
++++ b/src/game/sa1/special_stage/main.c
+@@ -2420,8 +2420,20 @@
+     sp34 = I(strc5690->unk8) - 0xC0;
+     sp3C = &sp4;
+     while (sp8[var_sb].unk4 < temp_r3) {
+-        if (((sp8[var_sb].unk8 != 0xFFFF) && !(sp8[var_sb].unk8 != 0)) || (sp8[var_sb].unk4 < sp34)
+-            || (((((uintptr_t)(strc40 + (var_sb >> 3)) >> (7 & var_sb)) & 1) != 0))) {
++        // SonAdvance-nx: loop head rewritten from the ROM's code. The decomp
++        // inverted the skip test and read the "collected" bit from a pointer
++        // value instead of strc40->mem, so collected rings were picked up
++        // again every frame (the ring counter ran several per ring). The ROM:
++        // 0xFFFF ends the list; a non-ring entry, an entry behind the
++        // player or an already collected ring is skipped.
++        if (sp8[var_sb].unk8 == 0xFFFF) {
++            break;
++        }
++        if ((sp8[var_sb].unk8 != 0) || (sp8[var_sb].unk4 < sp34) || ((sp1C[var_sb >> 3] >> (var_sb & 7)) & 1)) {
++            var_sb++;
++            continue;
++        }
++        {
+             u8 *ptrU8;
+             s32 valR3;
+             sp24 = Q(sp8[var_sb].unk0);
+@@ -2556,10 +2568,7 @@
+                     sp20++;
+                 }
+             }
+-        } else {
+-            break;
+         }
+-        // continue
+     }
+     // return
+ }

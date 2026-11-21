@@ -4,6 +4,8 @@ Newest first.
 
 ## 2026-11-20: special stage visuals diagnosed (no Switch build yet)
 
+- switch-test17: rings round, but the counter ran several per ring, some yellow blocks and streaks remained, and a "FAILURE!" banner at 158/60. Decomp error in the NONMATCH UpdateObjectsAndRender loop head: the skip test was inverted, skips ended the loop (break) instead of moving to the next entry, and the "collected" bit was read from a pointer value instead of strc40->mem, so collected rings were taken again on every frame in range. 0027 rewrites the loop head from the ROM's code (0xFFFF ends the list; non-ring, behind the player or collected entries are skipped). Harness: one count per ring sound; checkpoints pass with enough rings (forced 200) and fail with 3 ("NOT ENOUGH RINGS", "AAARGH"), as the code says. The "FAILURE!" in Mark's replay is not a checkpoint result: it is sub_802C488's feedback message after an object of type 2 bursts into 8 pieces (variant 1 or 2 by unk28 == 4), and the stage carries on after it in the replay. Not yet checked against the ROM.
+
 - switch-test15/16 (16 adds the NRO icon from assets/icon.*): Mark confirms the pipe and banner fixed, but the rings were drawn as yellow streaks. Decomp error in the NONMATCH UpdateObjectsAndRender: the ring scale matrix is written at &gOamBuffer[n * 4] (attr0 of each OAM entry) where the ROM writes gOamBuffer+6 (the affine parameter). The matrix stayed stale and the writes clobbered other sprites' attributes. 0026 points it at affineParam; the harness now draws round rings.
 
 - Mark's switch-test14 replays: the half-pipe drawn as scattered pieces with tile garbage over most of the screen, and the "GET 60 RINGS" banner garbled.

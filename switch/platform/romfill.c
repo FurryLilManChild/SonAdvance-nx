@@ -23,14 +23,14 @@ extern char __sonadv_romdata_start[];
 
 enum { OP_COPY = 0, OP_LIT = 1, OP_SKIP = 2 };
 
-static u32 Crc32(const u8 *p, size_t n)
+// Running CRC-32 (zlib's): start with 0xFFFFFFFF, finish with ~.
+static u32 Crc32Update(u32 c, const u8 *p, size_t n)
 {
-    u32 c = 0xFFFFFFFFu;
     for (size_t i = 0; i < n; i++) {
         c ^= p[i];
         for (int k = 0; k < 8; k++) c = (c >> 1) ^ (0xEDB88320u & (0u - (c & 1u)));
     }
-    return ~c;
+    return c;
 }
 
 static void *ReadAll(const char *path, size_t *outSize, size_t maxSize)
@@ -144,6 +144,9 @@ int SonAdv_RomFill(SonAdvRomInfo *info)
     // 3. Fill.
     uintptr_t base = (uintptr_t)__sonadv_romdata_start - (uintptr_t)anchor;
     size_t copied = 0, litBytes = 0, skipped = 0;
+    // The check covers exactly the bytes written, in table order: the section
+    // also holds pointers relocated to a different address on every launch.
+    u32 crcRun = 0xFFFFFFFFu;
     if (which == 1) {
         for (u32 i = 0; i < nEu; i++) {
             u64 dst; u32 src, len;
@@ -152,6 +155,7 @@ int SonAdv_RomFill(SonAdvRomInfo *info)
             memcpy(&len, euOps + i * 16 + 12, 4);
             if ((size_t)src + len > romSize) goto bad_table;
             memcpy((void *)(base + dst), rom + src, len);
+            crcRun = Crc32Update(crcRun, (const u8 *)(base + dst), len);
             copied += len;
         }
     } else {
@@ -164,10 +168,12 @@ int SonAdv_RomFill(SonAdvRomInfo *info)
             if (type == OP_COPY) {
                 if ((size_t)src + len > romSize) goto bad_table;
                 memcpy((void *)(base + dst), rom + src, len);
+                crcRun = Crc32Update(crcRun, (const u8 *)(base + dst), len);
                 copied += len;
             } else if (type == OP_LIT) {
                 if ((size_t)src + len > litSize) goto bad_table;
                 memcpy((void *)(base + dst), lit + src, len);
+                crcRun = Crc32Update(crcRun, (const u8 *)(base + dst), len);
                 litBytes += len;
             } else {
                 skipped += len;
@@ -177,7 +183,8 @@ int SonAdv_RomFill(SonAdvRomInfo *info)
     free(rom);
 
     // 4. Check: CRC of the filled data against the build tool's.
-    u32 crc = Crc32((const u8 *)__sonadv_romdata_start, (size_t)dataSize);
+    (void)dataSize;
+    u32 crc = ~crcRun;
     u32 want = (which == 1) ? crcEu : crcUs;
     info->copied = copied;
     info->literal = litBytes;

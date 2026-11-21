@@ -295,10 +295,17 @@ bad = [i for i in range(len(orig)) if img_us[i] != orig[i] and i not in skipset]
 if bad: die(f'USA rebuild differs outside skip ranges at {len(bad)} bytes, first file offset {bad[0]:#x}')
 print('romfill: proof OK: Europe rebuild identical; USA rebuild identical outside skip ranges')
 
-# expected CRCs of the filled .sonadv_romdata (runtime self-check)
-rs = S['.sonadv_romdata']; ro, rn = rs[4], rs[5]
-crc_eu = zlib.crc32(bytes(img_eu[ro:ro + rn]))
-crc_us = zlib.crc32(bytes(img_us[ro:ro + rn]))
+# Expected CRCs for the runtime self-check: over exactly the bytes the fill
+# writes, in table order. (Not the whole section: it also holds pointer slots
+# the loader relocates to a different address on every launch.)
+rs = S['.sonadv_romdata']; rn = rs[5]
+crc_eu = 0
+for va, n, eo in runs:
+    o = v2o(va); crc_eu = zlib.crc32(bytes(img_eu[o:o + n]), crc_eu)
+crc_us = 0
+for t, va, s_, l in us_ops:
+    if t != SKIP:
+        o = v2o(va); crc_us = zlib.crc32(bytes(img_us[o:o + l]), crc_us)
 
 # ---- table
 os.makedirs(out_dir, exist_ok=True)

@@ -56,17 +56,19 @@ for which, name in ((1, 'Europe'), (2, 'USA')):
     img = bytearray(base_img)
     rom = roms[which]
     base = 0  # in the NRO image, address == offset, so &__sonadv_romdata_start - anchor == 0
+    crc = 0   # over exactly the bytes written, in table order, as romfill.c does
     if which == 1:
         for i in range(n_eu):
             dst, src, ln = struct.unpack_from('<QII', tab, eu_ops + i * 16)
             assert src + ln <= len(rom)
             img[base + dst:base + dst + ln] = rom[src:src + ln]
+            crc = zlib.crc32(bytes(img[base + dst:base + dst + ln]), crc)
     else:
         for i in range(n_us):
             typ, dst, src, ln = struct.unpack_from('<IQII', tab, us_ops + i * 20)
             if typ == 0: img[base + dst:base + dst + ln] = rom[src:src + ln]
             elif typ == 1: img[base + dst:base + dst + ln] = tab[lit + src:lit + src + ln]
-    crc = zlib.crc32(bytes(img[anchor:anchor + data_size]))
+            if typ != 2: crc = zlib.crc32(bytes(img[base + dst:base + dst + ln]), crc)
     want = crc_eu if which == 1 else crc_us
     line = f'simfill: {name}: crc {crc:08x} (table {want:08x}) {"OK" if crc == want else "MISMATCH"}'
     if crc != want: ok = False
